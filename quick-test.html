@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>翻译功能快速测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            line-height: 1.8;
+        }
+
+        .test-box {
+            background: #f5f5f5;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border-left: 4px solid #0066cc;
+        }
+
+        .test-text {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            cursor: text;
+            user-select: text;
+        }
+
+        .instructions {
+            background: #fffbf0;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #ffc107;
+            margin: 20px 0;
+        }
+
+        .status {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+            border-left: 4px solid #4caf50;
+            font-size: 14px;
+        }
+
+        code {
+            background: #e0e0e0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+        }
+
+        h1 {
+            color: #0066cc;
+        }
+
+        h2 {
+            color: #333;
+            margin-top: 30px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🌐 DeepL 翻译插件 - 快速测试页面</h1>
+
+    <div class="instructions">
+        <h3>📝 测试步骤：</h3>
+        <ol>
+            <li>确保插件已重新加载（<code>chrome://extensions/</code> → 刷新）</li>
+            <li>按 <strong>F12</strong> 打开开发者工具，切换到 <strong>Console</strong> 标签</li>
+            <li>在下面的文本框中选中一段文本</li>
+            <li>观察 Console 输出和页面效果</li>
+            <li>点击出现的 <strong>🌐 翻译</strong> 按钮</li>
+            <li>查看翻译结果</li>
+        </ol>
+
+        <p><strong>⚠️ 提醒：</strong></p>
+        <ul>
+            <li>必须先设置 DeepL API Key（点击插件图标 → 输入 → 保存）</li>
+            <li>必须在 Console 中看到 "DeepL 翻译插件内容脚本已加载"</li>
+            <li>如果代理配置不正确，翻译会失败</li>
+        </ul>
+    </div>
+
+    <h2>🇬🇧 英文测试文本</h2>
+    <div class="test-box">
+        <div class="test-text">
+            Hello World! This is a simple test.
+        </div>
+        <div class="test-text">
+            Artificial Intelligence is transforming the way we live and work.
+        </div>
+        <div class="test-text">
+            The quick brown fox jumps over the lazy dog.
+        </div>
+    </div>
+
+    <h2>🇨🇳 中文测试文本</h2>
+    <div class="test-box">
+        <div class="test-text">
+            你好世界！这是一个简单的测试。
+        </div>
+        <div class="test-text">
+            人工智能正在改变我们的生活和工作方式。
+        </div>
+        <div class="test-text">
+            机器学习是人工智能的一个重要分支。
+        </div>
+    </div>
+
+    <h2>🇯🇵 日文测试文本</h2>
+    <div class="test-box">
+        <div class="test-text">
+            こんにちは世界！これは簡単なテストです。
+        </div>
+        <div class="test-text">
+            人工知能は私たちの生活と仕事の方法を変えています。
+        </div>
+    </div>
+
+    <h2>📏 长文本测试</h2>
+    <div class="test-box">
+        <div class="test-text">
+            The development of artificial intelligence has been one of the most significant technological advancements
+            of the 21st century. Machine learning algorithms can now analyze vast amounts of data to identify patterns
+            and make predictions. Deep learning uses neural networks to process information in ways that mimic the human
+            brain.
+        </div>
+    </div>
+
+    <div class="status">
+        ✅ 测试页面已加载<br>
+        按 F12 查看 Console
+    </div>
+
+    <script>
+        console.log('%c🌐 DeepL 翻译测试页面已加载', 'color: #0066cc; font-size: 16px; font-weight: bold;');
+        console.log('%c请按照以下步骤测试：', 'color: #333; font-size: 14px;');
+        console.log('1️⃣ 选中上面的任意文本');
+        console.log('2️⃣ 观察是否出现蓝色翻译按钮');
+        console.log('3️⃣ 点击翻译按钮');
+        console.log('4️⃣ 查看翻译结果');
+        console.log('');
+        console.log('📊 预期的 Console 输出：');
+        console.log('  ✅ "DeepL 翻译插件内容脚本已加载"');
+        console.log('  ✅ "选中文本: ..."');
+        console.log('  ✅ "显示翻译按钮，位置: ..."');
+        console.log('  ✅ "翻译按钮已添加到页面"');
+        console.log('  ✅ "翻译按钮被点击"');
+        console.log('  ✅ "开始翻译: ..."');
+        console.log('  ✅ "翻译成功: ..."');
+        console.log('');
+
+        // 监听文本选择（用于调试）
+        document.addEventListener('mouseup', function () {
+            const selected = window.getSelection().toString().trim();
+            if (selected) {
+                console.log('%c👉 页面检测到选中文本: ' + selected.substring(0, 30) + '...', 'color: #4caf50;');
+            }
+        });
+
+        // 每5秒检查一次插件状态
+        setInterval(() => {
+            const button = document.getElementById('deepl-translate-button');
+            const result = document.getElementById('deepl-translation-result');
+
+            if (button) {
+                console.log('🔵 翻译按钮存在于页面中');
+            }
+            if (result) {
+                console.log('⬜ 翻译结果框存在于页面中');
+            }
+        }, 5000);
+    </script>
+</body>
+
+</html>

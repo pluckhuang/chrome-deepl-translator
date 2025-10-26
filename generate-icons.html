@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>生成插件图标</title>
+</head>
+
+<body>
+    <canvas id="canvas16" width="16" height="16"></canvas>
+    <canvas id="canvas48" width="48" height="48"></canvas>
+    <canvas id="canvas128" width="128" height="128"></canvas>
+
+    <script>
+        // 绘制图标的函数
+        function drawIcon(canvas, size) {
+            const ctx = canvas.getContext('2d');
+
+            // 背景
+            ctx.fillStyle = '#0066cc';
+            ctx.fillRect(0, 0, size, size);
+
+            // 绘制地球图标
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = size / 16;
+
+            // 圆形
+            ctx.beginPath();
+            ctx.arc(size / 2, size / 2, size / 3, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // 横线
+            ctx.beginPath();
+            ctx.moveTo(size * 0.2, size / 2);
+            ctx.lineTo(size * 0.8, size / 2);
+            ctx.stroke();
+
+            // 竖线
+            ctx.beginPath();
+            ctx.ellipse(size / 2, size / 2, size / 8, size / 3, 0, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        // 绘制所有尺寸的图标
+        drawIcon(document.getElementById('canvas16'), 16);
+        drawIcon(document.getElementById('canvas48'), 48);
+        drawIcon(document.getElementById('canvas128'), 128);
+
+        // 导出为图片（需要手动右键保存）
+        console.log('请右键点击每个 canvas 保存为对应的图片文件');
+    </script>
+
+    <div style="margin-top: 20px; font-family: Arial;">
+        <h3>图标生成说明：</h3>
+        <ol>
+            <li>在浏览器中打开此文件</li>
+            <li>右键点击第一个小方块，选择"另存为图片"，保存为 icon16.png</li>
+            <li>右键点击第二个方块，保存为 icon48.png</li>
+            <li>右键点击第三个方块，保存为 icon128.png</li>
+            <li>将这三个文件放到 icons 文件夹中</li>
+        </ol>
+        <p><strong>或者使用以下 Node.js 脚本自动生成：</strong></p>
+    </div>
+</body>
+
+</html>

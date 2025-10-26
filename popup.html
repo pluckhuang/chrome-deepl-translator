@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepL 翻译助手</title>
+    <style>
+        body {
+            width: 400px;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+        }
+
+        h2 {
+            margin-top: 0;
+            color: #333;
+            font-size: 18px;
+        }
+
+        .section {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        input,
+        select,
+        textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 13px;
+            box-sizing: border-box;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+            font-family: inherit;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #0052a3;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .result {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #f5f5f5;
+            border-radius: 4px;
+            min-height: 60px;
+            font-size: 13px;
+            line-height: 1.6;
+            display: none;
+        }
+
+        .result.show {
+            display: block;
+        }
+
+        .error {
+            color: #d32f2f;
+            background-color: #ffebee;
+        }
+
+        .success {
+            color: #2e7d32;
+        }
+
+        .api-key-section {
+            background-color: #fffbf0;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+
+        .help-text {
+            font-size: 11px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .save-btn {
+            margin-top: 10px;
+            background-color: #4caf50;
+        }
+
+        .save-btn:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>🌐 DeepL 翻译助手</h2>
+
+    <div class="api-key-section">
+        <div class="section">
+            <label for="apiKey">DeepL API Key:</label>
+            <input type="password" id="apiKey" placeholder="输入你的 DeepL API Key">
+            <div class="help-text">
+                获取 API Key: <a href="https://www.deepl.com/pro-api" target="_blank">DeepL API</a>
+            </div>
+        </div>
+        <button class="save-btn" id="saveApiKey">保存 API Key</button>
+    </div>
+
+    <div class="section">
+        <label for="sourceText">要翻译的文本:</label>
+        <textarea id="sourceText" placeholder="输入或粘贴要翻译的段落..."></textarea>
+    </div>
+
+    <div class="section">
+        <label for="sourceLang">源语言:</label>
+        <select id="sourceLang">
+            <option value="AUTO">自动检测</option>
+            <option value="EN">英语</option>
+            <option value="ZH">中文</option>
+            <option value="JA">日语</option>
+            <option value="KO">韩语</option>
+            <option value="FR">法语</option>
+            <option value="DE">德语</option>
+            <option value="ES">西班牙语</option>
+            <option value="IT">意大利语</option>
+            <option value="RU">俄语</option>
+        </select>
+    </div>
+
+    <div class="section">
+        <label for="targetLang">目标语言:</label>
+        <select id="targetLang">
+            <option value="ZH">中文</option>
+            <option value="EN-US">英语(美)</option>
+            <option value="EN-GB">英语(英)</option>
+            <option value="JA">日语</option>
+            <option value="KO">韩语</option>
+            <option value="FR">法语</option>
+            <option value="DE">德语</option>
+            <option value="ES">西班牙语</option>
+            <option value="IT">意大利语</option>
+            <option value="RU">俄语</option>
+        </select>
+    </div>
+
+    <button id="translateBtn">翻译</button>
+
+    <div id="result" class="result"></div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>

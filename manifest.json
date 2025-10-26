@@ -1,0 +1,45 @@
+{
+    "manifest_version": 3,
+    "name": "DeepL 段落翻译助手",
+    "version": "1.0.0",
+    "description": "使用 DeepL API 进行段落翻译的 Chrome 扩展",
+    "permissions": [
+        "activeTab",
+        "storage",
+        "contextMenus",
+        "scripting"
+    ],
+    "host_permissions": [
+        "https://api-free.deepl.com/*",
+        "https://api.deepl.com/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": {
+            "16": "icons/icon16.png",
+            "48": "icons/icon48.png",
+            "128": "icons/icon128.png"
+        }
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "css": [
+                "content.css"
+            ]
+        }
+    ],
+    "icons": {
+        "16": "icons/icon16.png",
+        "48": "icons/icon48.png",
+        "128": "icons/icon128.png"
+    }
+}
