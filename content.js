@@ -2,8 +2,86 @@
 let translationBox = null;
 let isTranslating = false;
 let lastClickTime = 0;
+let lastFocusMarker = null;
+let startFocusMarker = null; // 添加起始标记变量
 
 console.log('DeepL 翻译插件内容脚本已加载');
+
+function addFocusMarker() {
+    // 1. 移除上一次的标记
+    if (lastFocusMarker) {
+        try { lastFocusMarker.remove(); } catch (e) { console.warn('移除旧标记(结束)失败:', e); }
+        lastFocusMarker = null;
+    }
+    if (startFocusMarker) {
+        try { startFocusMarker.remove(); } catch (e) { console.warn('移除旧标记(起始)失败:', e); }
+        startFocusMarker = null;
+    }
+
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+        try {
+            const range = selection.getRangeAt(0);
+
+            // ⚠️ 关键策略：先插入后面的标记，再插入前面的标记。
+            // 这样前面的插入操作不会影响后面位置的引用（如果是同一个文本节点）。
+
+            // --- 准备结束标记 Range ---
+            const endRange = range.cloneRange();
+            endRange.collapse(false); // 折叠到末尾
+
+            // --- 准备起始标记 Range ---
+            const startRange = range.cloneRange();
+            startRange.collapse(true); // 折叠到开始
+            
+            // --- 插入结束标记 ---
+            const endMarker = document.createElement('span');
+            endMarker.className = 'deepl-focus-marker-end deepl-no-select';
+            endMarker.innerHTML = '📍'; 
+            endMarker.style.cssText = `
+                display: inline-block;
+                margin-left: 2px;
+                vertical-align: middle;
+                font-style: normal;
+                cursor: help;
+                opacity: 0.8;
+                pointer-events: auto;
+                user-select: none;
+                -webkit-user-select: none;
+            `;
+            endMarker.title = '上次翻译结束位置';
+            
+            endRange.insertNode(endMarker);
+            lastFocusMarker = endMarker;
+
+            // --- 插入起始标记 ---
+            const startMarker = document.createElement('span');
+            startMarker.className = 'deepl-focus-marker-start deepl-no-select';
+            startMarker.innerHTML = '🚩'; 
+            startMarker.style.cssText = `
+                display: inline-block;
+                margin-right: 2px;
+                vertical-align: middle;
+                font-style: normal;
+                cursor: help;
+                opacity: 0.8;
+                pointer-events: auto;
+                user-select: none;
+                -webkit-user-select: none;
+            `;
+            startMarker.title = '上次翻译开始位置';
+            
+            startRange.insertNode(startMarker);
+            startFocusMarker = startMarker;
+
+            console.log('已添加起止位置标记');
+        } catch (e) {
+             console.error('添加标记失败:', e);
+             // 如果出错，尝试清理可能遗留的标记
+             if(lastFocusMarker && !startFocusMarker) lastFocusMarker.remove();
+        }
+    }
+}
 
 // 监听文本选择
 document.addEventListener('mouseup', function (e) {
@@ -109,6 +187,9 @@ function showTranslateButton(x, y, text) {
             console.log('正在翻译中，忽略点击');
             return;
         }
+
+        // 标记本次翻译原文的结束位置
+        addFocusMarker();
 
         // 清除文本选择，避免再次触发
         window.getSelection().removeAllRanges();
@@ -280,9 +361,12 @@ function showTranslationResult(x, y, text, isError, isLoading = false) {
 
 // 监听来自 background.js 的消息 (用于右键菜单翻译)
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'translate') {
+        if (request.action === 'translate') {
         console.log('收到后台翻译请求:', request.text);
         
+        // 尝试标记结束位置
+        addFocusMarker();
+
         // 尝试获取当前选区的坐标
         let x = window.innerWidth / 2;
         let y = window.innerHeight / 2;
