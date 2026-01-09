@@ -11,7 +11,8 @@
     ],
     "host_permissions": [
         "https://api-free.deepl.com/*",
-        "https://api.deepl.com/*"
+        "https://api.deepl.com/*",
+        "<all_urls>"
     ],
     "background": {
         "service_worker": "background.js"
@@ -29,6 +30,7 @@
             "matches": [
                 "<all_urls>"
             ],
+            "all_frames": true,
             "js": [
                 "content.js"
             ],

@@ -7,36 +7,59 @@ console.log('DeepL 翻译插件内容脚本已加载');
 
 // 监听文本选择
 document.addEventListener('mouseup', function (e) {
-    // 如果点击的是翻译按钮或结果框，不处理
-    if (translationBox && translationBox.contains(e.target)) {
-        console.log('点击了翻译相关元素，忽略');
-        return;
-    }
+    // 延迟处理，确保选区状态已更新
+    setTimeout(() => {
+        // 检查是否点击了翻译组件
+        if (translationBox && (translationBox.contains(e.target) || e.target === translationBox)) {
+            return;
+        }
 
-    // 如果正在翻译，不处理
-    if (isTranslating) {
-        console.log('正在翻译中，忽略选择事件');
-        return;
-    }
+        const selection = window.getSelection();
+        const selectedText = selection.toString().trim();
 
-    // 防止频繁触发（100ms 内只处理一次）
-    const now = Date.now();
-    if (now - lastClickTime < 100) {
-        return;
-    }
-    lastClickTime = now;
+        // 1. 如果没有选中文本，或者点击了空白处，隐藏按钮
+        if (!selectedText) {
+            hideTranslateButton();
+            return;
+        }
 
-    const selectedText = window.getSelection().toString().trim();
+        // 2. 如果正在翻译中，不处理
+        if (isTranslating) {
+            return;
+        }
 
-    console.log('选中文本:', selectedText ? `"${selectedText.substring(0, 50)}..." (${selectedText.length}字符)` : '无');
+        // 3. 检查文本有效性
+        if (selectedText.length > 0 && selectedText.length < 5000 && selection.rangeCount > 0) {
+            try {
+                const range = selection.getRangeAt(0);
+                const rect = range.getBoundingClientRect();
 
-    if (selectedText.length > 0 && selectedText.length < 5000) {
-        // 显示翻译按钮
-        showTranslateButton(e.pageX, e.pageY, selectedText);
-    } else {
-        hideTranslateButton();
-    }
-});
+                // 确保选区可见且有效的检查
+                if (rect.width === 0 || rect.height === 0) {
+                    // 如果无法获取有效矩形（例如在某些复杂布局中），回退到鼠标位置
+                    showTranslateButton(e.pageX + 10, e.pageY + 10, selectedText);
+                    return;
+                }
+                
+                // 计算坐标
+                const scrollX = window.scrollX || window.pageXOffset;
+                const scrollY = window.scrollY || window.pageYOffset;
+
+                // 优先显示在选区底部中间或左侧
+                // 这里选择左下角 + 垂直偏移
+                const x = rect.left + scrollX;
+                const y = rect.bottom + scrollY;
+
+                showTranslateButton(x, y, selectedText);
+            } catch (err) {
+                console.error('获取选区位置失败，回退到鼠标位置:', err);
+                showTranslateButton(e.pageX + 10, e.pageY + 10, selectedText);
+            }
+        } else {
+            hideTranslateButton();
+        }
+    }, 10);
+}, true); // 使用 capturing 阶段，防止被阻止
 
 // 点击其他地方隐藏翻译框
 document.addEventListener('mousedown', function (e) {
@@ -153,6 +176,8 @@ function showTranslationResult(x, y, text, isError, isLoading = false) {
     border-radius: 8px;
     max-width: 500px;
     min-width: 200px;
+    max-height: 400px;
+    overflow-y: auto;
     z-index: 999999;
     box-shadow: 0 4px 16px rgba(0,0,0,0.2);
     font-size: 14px;
@@ -164,6 +189,8 @@ function showTranslationResult(x, y, text, isError, isLoading = false) {
     user-select: text;
     -webkit-user-select: text;
     pointer-events: auto;
+    opacity: 0; /* 先隐藏以计算位置 */
+    transition: opacity 0.2s;
   `;
 
     resultBox.textContent = text;
@@ -207,10 +234,77 @@ function showTranslationResult(x, y, text, isError, isLoading = false) {
     resultBox.appendChild(closeBtn);
 
     document.body.appendChild(resultBox);
+
+    // 智能调整位置，防止超出视口
+    const boxRect = resultBox.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const scrollX = window.scrollX || window.pageXOffset;
+    const scrollY = window.scrollY || window.pageYOffset;
+
+    let finalX = x;
+    let finalY = y + 10;
+
+    // 1. 水平方向调整
+    if ((finalX - scrollX) + boxRect.width > viewportWidth - 20) {
+        // 如果右侧超出，向左移动
+        finalX = scrollX + viewportWidth - boxRect.width - 20;
+    }
+    if (finalX < scrollX + 20) {
+        // 如果左侧超出，向右移动
+        finalX = scrollX + 20;
+    }
+
+    // 2. 垂直方向调整
+    if ((finalY - scrollY) + boxRect.height > viewportHeight - 20) {
+        // 如果底部超出，尝试向上移动
+        // 将底部边缘对齐到视口底部减去边距
+        finalY = scrollY + viewportHeight - boxRect.height - 20;
+    }
+    if (finalY < scrollY + 20) {
+        // 防止顶部超出
+        finalY = scrollY + 20;
+    }
+
+    resultBox.style.left = `${finalX}px`;
+    resultBox.style.top = `${finalY}px`;
+    // 强制重绘后显示
+    requestAnimationFrame(() => {
+        resultBox.style.opacity = '1';
+    });
+    
     translationBox = resultBox;
 
     console.log('翻译结果框已添加到页面');
 }
+
+// 监听来自 background.js 的消息 (用于右键菜单翻译)
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'translate') {
+        console.log('收到后台翻译请求:', request.text);
+        
+        // 尝试获取当前选区的坐标
+        let x = window.innerWidth / 2;
+        let y = window.innerHeight / 2;
+        
+        const selection = window.getSelection();
+        if (selection.rangeCount > 0) {
+            try {
+                const range = selection.getRangeAt(0);
+                const rect = range.getBoundingClientRect();
+                // 简单的坐标计算，确保在视口内
+                if (rect.width > 0 && rect.height > 0) {
+                    x = rect.left + window.scrollX;
+                    y = rect.bottom + window.scrollY;
+                }
+            } catch (e) {
+                console.error('获取选区位置失败:', e);
+            }
+        }
+        
+        translateSelectedText(request.text, x, y);
+    }
+});
 
 async function translateText(text, apiKey) {
     console.log('通过 background.js 调用 DeepL API...');

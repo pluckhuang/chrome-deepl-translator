@@ -20,6 +20,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
         chrome.tabs.sendMessage(tab.id, {
             action: 'translate',
             text: info.selectionText
+        }).catch(err => {
+            console.warn('发送消息失败，可能是页面未重新加载:', err);
         });
     }
 });
