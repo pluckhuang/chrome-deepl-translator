@@ -119,7 +119,6 @@ document.addEventListener('DOMContentLoaded', function () {
             : 'https://api.deepl.com/v2/translate';
 
         const params = new URLSearchParams({
-            auth_key: apiKey,
             text: text,
             target_lang: targetLang
         });
@@ -131,6 +130,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
+                'Authorization': `DeepL-Auth-Key ${apiKey}`,
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
             body: params

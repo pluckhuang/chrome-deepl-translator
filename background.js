@@ -67,7 +67,6 @@ async function handleTranslateRequest(request, sendResponse) {
         console.log('API 地址:', apiUrl);
 
         const params = new URLSearchParams({
-            auth_key: apiKey,
             text: text,
             target_lang: targetLang || 'ZH'
         });
@@ -79,6 +78,7 @@ async function handleTranslateRequest(request, sendResponse) {
         const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
+                'Authorization': `DeepL-Auth-Key ${apiKey}`,
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
             body: params
