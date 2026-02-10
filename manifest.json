@@ -37,6 +37,15 @@
             "css": [
                 "content.css"
             ]
+        },
+        {
+            "matches": [
+                "*://twitter.com/*",
+                "*://x.com/*"
+            ],
+            "js": [
+                "twitter_translator.js"
+            ]
         }
     ],
     "icons": {
