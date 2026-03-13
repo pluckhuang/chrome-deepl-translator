@@ -4,6 +4,7 @@ console.log('DeepL 翻译插件后台服务已启动');
 
 const MENU_IDS = {
     translate: 'translateWithDeepL',
+    translatePage: 'translatePageWithDeepL',
     captureTweet: 'captureXTweetScreenshot'
 };
 
@@ -17,8 +18,14 @@ chrome.runtime.onInstalled.addListener(() => {
 function createContextMenus() {
     chrome.contextMenus.create({
         id: MENU_IDS.translate,
-        title: '使用 DeepL 翻译',
+        title: '使用 DeepL 翻译选中文本',
         contexts: ['selection']
+    });
+
+    chrome.contextMenus.create({
+        id: MENU_IDS.translatePage,
+        title: '翻译整个网页',
+        contexts: ['page']
     });
 
     chrome.contextMenus.create({
@@ -43,6 +50,16 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
             console.warn('发送消息失败，可能是页面未重新加载:', err);
         });
 
+        return;
+    }
+
+    if (info.menuItemId === MENU_IDS.translatePage) {
+        console.log('请求全网页翻译');
+        chrome.tabs.sendMessage(tab.id, {
+            action: 'translateFullPage'
+        }).catch(err => {
+            console.warn('发送全页翻译消息失败:', err);
+        });
         return;
     }
 
@@ -94,7 +111,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // 处理翻译请求
 async function handleTranslateRequest(request, sendResponse) {
-    console.log('处理翻译请求:', request.text?.substring(0, 50) + '...');
+    const textPreview = Array.isArray(request.text) 
+        ? `[数组, 共 ${request.text.length} 项] ${request.text[0]?.substring(0, 30)}...`
+        : request.text?.substring(0, 50) + '...';
+        
+    console.log('处理翻译请求:', textPreview);
 
     try {
         const { text, apiKey, sourceLang, targetLang } = request;
@@ -112,24 +133,25 @@ async function handleTranslateRequest(request, sendResponse) {
             ? 'https://api-free.deepl.com/v2/translate'
             : 'https://api.deepl.com/v2/translate';
 
-        console.log('API 地址:', apiUrl);
-
-        const params = new URLSearchParams({
-            text: text,
-            target_lang: targetLang || 'ZH'
-        });
+        const params = {
+            target_lang: targetLang || 'ZH',
+            text: Array.isArray(text) ? text : [text]
+        };
 
         if (sourceLang && sourceLang !== 'AUTO') {
-            params.append('source_lang', sourceLang);
+            params.source_lang = sourceLang;
         }
+
+        // 确保 apiKey 中没有隐藏的 Unicode 不可见字符或多余的换行/空格
+        const cleanApiKey = apiKey.replace(/[^\x20-\x7E]/g, '').trim();
 
         const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
-                'Authorization': `DeepL-Auth-Key ${apiKey}`,
-                'Content-Type': 'application/x-www-form-urlencoded',
+                'Authorization': `DeepL-Auth-Key ${cleanApiKey}`,
+                'Content-Type': 'application/json',
             },
-            body: params
+            body: JSON.stringify(params)
         });
 
         console.log('API 响应状态:', response.status);
@@ -146,15 +168,21 @@ async function handleTranslateRequest(request, sendResponse) {
         }
 
         const data = await response.json();
-        console.log('API 返回数据:', data);
 
         if (data.translations && data.translations.length > 0) {
-            const translation = data.translations[0].text;
-            console.log('翻译成功:', translation.substring(0, 50) + '...');
-            sendResponse({
-                success: true,
-                translation: translation
-            });
+            // 如果请求是一个数组，或者长度>1，返回 translations 数组，包含所有结果
+            // 否则为了兼容旧代码返回单个字符串
+            if (Array.isArray(text)) {
+                sendResponse({
+                    success: true,
+                    translations: data.translations.map(t => t.text)
+                });
+            } else {
+                sendResponse({
+                    success: true,
+                    translation: data.translations[0].text
+                });
+            }
         } else {
             sendResponse({
                 success: false,

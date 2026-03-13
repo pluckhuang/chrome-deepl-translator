@@ -361,7 +361,13 @@ function showTranslationResult(x, y, text, isError, isLoading = false) {
 
 // 监听来自 background.js 的消息 (用于右键菜单翻译)
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-        if (request.action === 'translate') {
+    if (request.action === 'translateFullPage') {
+        console.log('收到全网页翻译请求');
+        translateFullPage();
+        return;
+    }
+
+    if (request.action === 'translate') {
         console.log('收到后台翻译请求:', request.text);
         
         // 尝试标记结束位置
@@ -420,4 +426,128 @@ async function translateText(text, apiKey) {
             }
         );
     });
+}
+
+// 收集并翻译全部网页可见文本
+async function translateFullPage() {
+    console.log('开始全网页翻译...');
+    
+    // 添加简单的屏幕提示
+    let toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#0066cc;color:white;padding:10px 20px;border-radius:4px;z-index:999999;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,0.2)';
+    toast.textContent = '🔄 正在准备翻译全网页...';
+    document.body.appendChild(toast);
+
+    let apiKey = '';
+    
+    // 获取API key
+    try {
+        const result = await new Promise(resolve => {
+            chrome.runtime.sendMessage({ action: 'getApiKey' }, resolve);
+        });
+        if (result && result.apiKey) {
+            apiKey = result.apiKey;
+        } else {
+            alert('请先设置 DeepL API Key');
+            return;
+        }
+    } catch (err) {
+        console.error('获取 API Key 失败', err);
+        toast.textContent = '❌ 获取 API Key 失败';
+        setTimeout(() => toast.remove(), 3000);
+        return;
+    }
+
+    // 筛选有效文本节点
+    const textNodes = [];
+    const walker = document.createTreeWalker(
+        document.body,
+        NodeFilter.SHOW_TEXT,
+        {
+            acceptNode: function(node) {
+                const parent = node.parentElement;
+                if (!parent) return NodeFilter.FILTER_REJECT;
+                // 忽略非显示相关的标签
+                const tag = parent.tagName.toLowerCase();
+                const ignoreTags = ['script', 'style', 'noscript', 'code', 'pre', 'kbd'];
+                if (ignoreTags.includes(tag)) return NodeFilter.FILTER_REJECT;
+                // 空白或太短无意义
+                const text = node.nodeValue.trim();
+                if (text.length < 2) return NodeFilter.FILTER_REJECT;
+                // 简单过滤隐藏的节点 (注意：getComputedStyle 比较耗时，仅在需要时使用，已暂时注释防卡顿)
+                // const style = window.getComputedStyle(parent);
+                // if (style.display === 'none' || style.visibility === 'hidden') {
+                //    return NodeFilter.FILTER_REJECT;
+                // }
+                return NodeFilter.FILTER_ACCEPT;
+            }
+        }
+    );
+
+    let node;
+    while ((node = walker.nextNode())) {
+        textNodes.push(node);
+    }
+
+    if (textNodes.length === 0) {
+        console.log('未找到需要翻译的文本');
+        toast.textContent = '⚠️ 未找到需要翻译的文本';
+        setTimeout(() => toast.remove(), 3000);
+        return;
+    }
+    
+    console.log(`找到 ${textNodes.length} 个文本节点，开始批量翻译`);
+    toast.textContent = `🔄 共找到 ${textNodes.length} 个文本片段，正在翻译...`;
+
+    // 分批翻译，每批30个，或者按字符数限制
+    const batchSize = 30;
+    let translatedCount = 0;
+
+    for (let i = 0; i < textNodes.length; i += batchSize) {
+        const batchNodes = textNodes.slice(i, i + batchSize);
+        const batchTexts = batchNodes.map(n => n.nodeValue.trim());
+
+        try {
+            const response = await new Promise((resolve, reject) => {
+                chrome.runtime.sendMessage(
+                    {
+                        action: 'translate',
+                        text: batchTexts,
+                        apiKey: apiKey,
+                        sourceLang: 'AUTO',
+                        targetLang: 'ZH'
+                    },
+                    (res) => {
+                        if (chrome.runtime.lastError) {
+                            reject(new Error(chrome.runtime.lastError.message));
+                        } else if (res && res.success) {
+                            resolve(res.translations);
+                        } else {
+                            reject(new Error(res?.error || '翻译批次失败'));
+                        }
+                    }
+                );
+            });
+
+            // 成功后按顺序更新 DOM
+            if (response && response.length === batchNodes.length) {
+                batchNodes.forEach((node, idx) => {
+                    if (response[idx]) {
+                        node.nodeValue = node.nodeValue.replace(batchTexts[idx], response[idx]);
+                    }
+                });
+                translatedCount += batchNodes.length;
+                toast.textContent = `🔄 翻译进度: ${translatedCount} / ${textNodes.length}`;
+            } else {
+                console.warn('API 返回的结果数量与请求不匹配，或 response为空', response, batchNodes.length);
+            }
+        } catch (error) {
+            console.error(`批量翻译失败 (${i} 到 ${i + batchSize}):`, error);
+        }
+    }
+    
+    console.log('全网页翻译完成！');
+    toast.textContent = '✅ 全网页翻译完成！';
+    toast.style.background = '#4caf50';
+    setTimeout(() => toast.remove(), 3000);
 }
