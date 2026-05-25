@@ -208,7 +208,7 @@ function hideTranslateButton() {
         translationBox.remove();
         translationBox = null;
     }
-    isTranslating = false;
+    // isTranslating 由 translateSelectedText 的 finally 块统一管理
 }
 
 async function translateSelectedText(text, x, y) {

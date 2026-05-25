@@ -158,11 +158,15 @@ async function handleTranslateRequest(request, sendResponse) {
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            const errorMsg = errorData.message || `HTTP ${response.status}: ${response.statusText}`;
+            let errorMsg = errorData.message || `HTTP ${response.status}: ${response.statusText}`;
+            if (response.status === 429) {
+                errorMsg = 'rate_limit';
+            }
             console.error('API 错误:', errorMsg);
             sendResponse({
                 success: false,
-                error: errorMsg
+                error: errorMsg,
+                status: response.status
             });
             return;
         }
