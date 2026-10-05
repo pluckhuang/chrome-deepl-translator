@@ -33,6 +33,12 @@
             ],
             "all_frames": true,
             "js": [
+                "src/shared/core.js",
+                "src/shared/client.js",
+                "src/content/ui.js",
+                "src/content/selection.js",
+                "src/content/page-dom.js",
+                "src/content/page-translation.js",
                 "content.js"
             ],
             "css": [
@@ -45,6 +51,8 @@
                 "*://x.com/*"
             ],
             "js": [
+                "src/content/twitter-selectors.js",
+                "src/content/tweet-capture.js",
                 "twitter_translator.js"
             ]
         }

@@ -1,152 +1,83 @@
-// popup.js - 弹窗逻辑
-document.addEventListener('DOMContentLoaded', function () {
-    const apiKeyInput = document.getElementById('apiKey');
-    const saveApiKeyBtn = document.getElementById('saveApiKey');
-    const sourceText = document.getElementById('sourceText');
-    const sourceLang = document.getElementById('sourceLang');
-    const targetLang = document.getElementById('targetLang');
-    const translateBtn = document.getElementById('translateBtn');
-    const resultDiv = document.getElementById('result');
+// 弹窗只负责输入和显示；请求统一经过后台翻译服务。
+(() => {
+    document.addEventListener('DOMContentLoaded', () => {
+        const elements = Object.fromEntries(['apiKey', 'saveApiKey', 'sourceText', 'sourceLang', 'targetLang', 'translateBtn', 'result']
+            .map(id => [id, document.getElementById(id)]));
 
-    // 加载保存的 API Key
-    chrome.storage.sync.get(['deeplApiKey'], function (result) {
-        if (result.deeplApiKey) {
-            apiKeyInput.value = result.deeplApiKey;
+        function showResult(text, type = 'success') {
+            elements.result.textContent = text;
+            elements.result.className = `result show ${type}`;
         }
-    });
-
-    // 获取当前页面选中的文本
-    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-        if (tabs[0] && tabs[0].id) {
-            const tab = tabs[0];
-
-            // 检查是否是特殊页面（chrome://, about:, edge:// 等）
-            if (tab.url && (
-                tab.url.startsWith('chrome://') ||
-                tab.url.startsWith('about:') ||
-                tab.url.startsWith('edge://') ||
-                tab.url.startsWith('chrome-extension://')
-            )) {
-                // 特殊页面无法注入脚本，直接返回
-                console.log('特殊页面，无法获取选中文本');
-                return;
-            }
-
-            // 尝试获取选中文本
-            chrome.scripting.executeScript({
-                target: { tabId: tab.id },
-                func: () => window.getSelection().toString()
-            }).then(results => {
-                if (results && results[0] && results[0].result) {
-                    const selectedText = results[0].result.trim();
-                    if (selectedText) {
-                        sourceText.value = selectedText;
-                        // 自动聚焦到翻译按钮
-                        translateBtn.focus();
-                    }
+        async function loadSettings() {
+            try {
+                const settings = await chrome.storage.sync.get(['deeplApiKey', 'sourceLang', 'targetLang']);
+                // 避免异步读取覆盖用户已经开始输入的 Key。
+                if (!elements.apiKey.value) elements.apiKey.value = settings.deeplApiKey || '';
+                for (const id of ['sourceLang', 'targetLang']) {
+                    if ([...elements[id].options].some(option => option.value === settings[id])) elements[id].value = settings[id];
                 }
-            }).catch(err => {
-                // 静默处理错误，不影响用户使用
-                console.log('无法获取选中文本:', err.message);
+            } catch (error) {
+                showResult(`读取设置失败：${error.message}`, 'error');
+            }
+        }
+        async function loadSelection() {
+            try {
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                if (tab?.id == null || (tab.url && !/^(https?|file):/.test(tab.url))) return;
+                const results = await chrome.scripting.executeScript({
+                    target: { tabId: tab.id, allFrames: true },
+                    func: () => window.getSelection()?.toString().trim() || ''
+                });
+                const selected = results.find(result => result.result)?.result;
+                if (selected && !elements.sourceText.value) {
+                    elements.sourceText.value = selected;
+                    elements.translateBtn.focus();
+                }
+            } catch {
+                // 浏览器内部页面无法注入，但仍可在弹窗手动输入。
+            }
+        }
+        elements.saveApiKey.addEventListener('click', async () => {
+            const apiKey = DeepL.normalizeApiKey(elements.apiKey.value);
+            if (!apiKey) return showResult('请输入有效的 API Key', 'error');
+            elements.saveApiKey.disabled = true;
+            try {
+                await chrome.storage.sync.set({ deeplApiKey: apiKey });
+                elements.apiKey.value = apiKey;
+                showResult('API Key 保存成功！');
+            } catch (error) {
+                showResult(`保存失败：${error.message}`, 'error');
+            } finally {
+                elements.saveApiKey.disabled = false;
+            }
+        });
+        for (const id of ['sourceLang', 'targetLang']) {
+            elements[id].addEventListener('change', () => {
+                chrome.storage.sync.set({ [id]: elements[id].value }).catch(error => showResult(`保存语言失败：${error.message}`, 'error'));
             });
         }
-    });
-
-    // 保存 API Key
-    saveApiKeyBtn.addEventListener('click', function () {
-        const apiKey = apiKeyInput.value.trim();
-        if (!apiKey) {
-            showResult('请输入有效的 API Key', 'error');
-            return;
-        }
-
-        chrome.storage.sync.set({ deeplApiKey: apiKey }, function () {
-            showResult('API Key 保存成功！', 'success');
+        elements.translateBtn.addEventListener('click', async () => {
+            if (elements.translateBtn.disabled) return;
+            const text = elements.sourceText.value.trim();
+            const apiKey = DeepL.normalizeApiKey(elements.apiKey.value);
+            if (!text) return showResult('请输入要翻译的文本', 'error');
+            if (!apiKey) return showResult('请先输入 API Key', 'error');
+            elements.translateBtn.disabled = true;
+            elements.translateBtn.textContent = '翻译中...';
+            elements.result.classList.remove('show');
+            try {
+                const translation = await DeepL.client.translate(text, {
+                    apiKey, sourceLang: elements.sourceLang.value, targetLang: elements.targetLang.value
+                });
+                showResult(translation);
+            } catch (error) {
+                showResult(`翻译失败：${error.message}`, 'error');
+            } finally {
+                elements.translateBtn.disabled = false;
+                elements.translateBtn.textContent = '翻译';
+            }
         });
+        loadSettings();
+        loadSelection();
     });
-
-    // 翻译按钮点击事件
-    translateBtn.addEventListener('click', async function () {
-        const text = sourceText.value.trim();
-        const apiKey = apiKeyInput.value.trim();
-
-        if (!text) {
-            showResult('请输入要翻译的文本', 'error');
-            return;
-        }
-
-        if (!apiKey) {
-            showResult('请先输入并保存 API Key', 'error');
-            return;
-        }
-
-        // 禁用按钮，显示加载状态
-        translateBtn.disabled = true;
-        translateBtn.textContent = '翻译中...';
-        resultDiv.classList.remove('show');
-
-        try {
-            const translation = await translateText(
-                text,
-                apiKey,
-                sourceLang.value === 'AUTO' ? null : sourceLang.value,
-                targetLang.value
-            );
-
-            showResult(translation, 'success');
-        } catch (error) {
-            showResult(`翻译失败: ${error.message}`, 'error');
-        } finally {
-            translateBtn.disabled = false;
-            translateBtn.textContent = '翻译';
-        }
-    });
-
-    // 显示结果
-    function showResult(text, type) {
-        resultDiv.textContent = text;
-        resultDiv.className = 'result show';
-        if (type === 'error') {
-            resultDiv.classList.add('error');
-        }
-    }
-
-    // 调用 DeepL API 进行翻译
-    async function translateText(text, apiKey, sourceLang, targetLang) {
-        // 判断是免费版还是付费版 API
-        const apiUrl = apiKey.endsWith(':fx')
-            ? 'https://api-free.deepl.com/v2/translate'
-            : 'https://api.deepl.com/v2/translate';
-
-        const params = new URLSearchParams({
-            text: text,
-            target_lang: targetLang
-        });
-
-        if (sourceLang) {
-            params.append('source_lang', sourceLang);
-        }
-
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Authorization': `DeepL-Auth-Key ${apiKey}`,
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: params
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-
-        if (data.translations && data.translations.length > 0) {
-            return data.translations[0].text;
-        } else {
-            throw new Error('翻译结果为空');
-        }
-    }
-});
+})();

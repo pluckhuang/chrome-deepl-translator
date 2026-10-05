@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<title>弹窗回归测试</title>
+<pre id="deepl-test-results">RUNNING</pre>
+<script>
+(async () => {
+    const result = document.getElementById('deepl-test-results');
+    try {
+        const source = await (await fetch('../popup.html')).text();
+        const frame = document.createElement('iframe');
+        frame.width = '480'; frame.height = '900';
+        const base = new URL('../', location.href).href;
+        frame.srcdoc = source.replace('<head>', `<head><base href="${base}"><script src="tests/browser-mock.js"><\/script>`)
+            .replace('</body>', '<script src="tests/popup-test.js"><\/script></body>');
+        document.body.appendChild(frame);
+    } catch (error) {
+        result.textContent = `FAIL: ${error.message}`;
+        result.dataset.status = 'failed';
+    }
+})();
+</script>
+</html>

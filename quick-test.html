@@ -87,7 +87,7 @@
         <p><strong>⚠️ 提醒：</strong></p>
         <ul>
             <li>必须先设置 DeepL API Key（点击插件图标 → 输入 → 保存）</li>
-            <li>必须在 Console 中看到 "DeepL 翻译插件内容脚本已加载"</li>
+            <li>选中文本后应出现蓝色「翻译」按钮；本地文件需在扩展详情中允许访问文件网址</li>
             <li>如果代理配置不正确，翻译会失败</li>
         </ul>
     </div>
@@ -151,15 +151,7 @@
         console.log('3️⃣ 点击翻译按钮');
         console.log('4️⃣ 查看翻译结果');
         console.log('');
-        console.log('📊 预期的 Console 输出：');
-        console.log('  ✅ "DeepL 翻译插件内容脚本已加载"');
-        console.log('  ✅ "选中文本: ..."');
-        console.log('  ✅ "显示翻译按钮，位置: ..."');
-        console.log('  ✅ "翻译按钮已添加到页面"');
-        console.log('  ✅ "翻译按钮被点击"');
-        console.log('  ✅ "开始翻译: ..."');
-        console.log('  ✅ "翻译成功: ..."');
-        console.log('');
+        console.log('📊 检查按钮、译文与右键菜单；插件不会在日志中输出原文和译文。');
 
         // 监听文本选择（用于调试）
         document.addEventListener('mouseup', function () {
