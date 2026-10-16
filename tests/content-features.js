@@ -129,6 +129,74 @@
             assert(document.documentElement.style.scrollBehavior === 'smooth', '应恢复网站原本的平滑滚动设置');
             document.documentElement.style.scrollBehavior = '';
         });
+        await test('整页截图逐屏拼接、浮层只出现一次并恢复页面', async () => {
+            fixture.innerHTML = '<div id="fixed-top" style="position:fixed;top:0;left:0;width:100%;height:30px;background:#c00">Top</div>'
+                + '<div id="fixed-bottom" style="position:fixed;bottom:0;right:0;width:80px;height:30px;transition:visibility 1s">Chat</div>'
+                + '<div id="sticky-bar" style="position:sticky;top:0;height:20px">Sticky</div><div style="height:3000px"></div>';
+            document.documentElement.style.scrollBehavior = 'smooth';
+            window.scrollTo({ top: 300, behavior: 'instant' });
+            const initialScroll = window.scrollY;
+            const [top, bottom, sticky] = ['fixed-top', 'fixed-bottom', 'sticky-bar'].map(id => document.getElementById(id));
+            const slices = [];
+            // 模拟截图：每一行像素的颜色编码它在整页中的位置，用来验证拼接没有错位。
+            const encode = y => [y % 251, Math.floor(y / 251) % 251];
+            const captureTab = async () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = innerWidth * devicePixelRatio;
+                canvas.height = innerHeight * devicePixelRatio;
+                const context = canvas.getContext('2d');
+                for (let row = 0; row < innerHeight; row++) {
+                    const [r, g] = encode(Math.round(window.scrollY) + row);
+                    context.fillStyle = `rgb(${r},${g},0)`;
+                    context.fillRect(0, row * devicePixelRatio, canvas.width, devicePixelRatio);
+                }
+                return canvas.toDataURL('image/png');
+            };
+            const saved = [];
+            const options = {
+                sendToTab: async (_, message) => {
+                    const result = await DeepL.pageCapture.handle(message);
+                    if (message.step === 'scroll') {
+                        slices.push([top, bottom].map(node => getComputedStyle(node).visibility).concat(getComputedStyle(sticky).position));
+                    }
+                    return result;
+                },
+                captureTab, saveImage: async image => { saved.push(image); }, minInterval: 0
+            };
+            const service = DeepL.createPageCapture(options);
+            const capture = service.capture({ id: 1 });
+            await assert((await DeepL.createPageCapture(options).capture({ id: 1 }).catch(error => error.message)).includes('正在截图'), '页面侧应阻止并发截图');
+            await capture;
+            assert(slices.length >= 4, '长页面应逐屏截取');
+            assert(slices[0].join() === 'visible,hidden,relative', '第一屏保留顶部浮层，吸顶元素改为普通定位');
+            assert(slices[1].join() === 'hidden,hidden,relative', '中间各屏隐藏浮层');
+            assert(slices.at(-1).join() === 'hidden,visible,relative', '最后一屏保留底部浮层');
+            const image = new Image();
+            await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; image.src = saved[0].dataUrl; });
+            const canvas = document.createElement('canvas');
+            canvas.width = image.width;
+            canvas.height = image.height;
+            canvas.getContext('2d').drawImage(image, 0, 0);
+            const pixels = canvas.getContext('2d').getImageData(5, 0, 1, image.height).data;
+            const scale = image.width / innerWidth;
+            assert(image.height >= 3000 * scale, '结果应覆盖整页高度');
+            for (let y = 0; y * scale < image.height; y += 7) {
+                const index = Math.floor(y * scale) * 4;
+                const [r, g] = encode(y);
+                assert(pixels[index] === r && pixels[index + 1] === g, `第 ${y}px 拼接错位`);
+            }
+            assert(Math.abs(window.scrollY - initialScroll) <= 1, '截图后恢复滚动位置');
+            assert(!top.style.visibility && !bottom.style.visibility && bottom.style.transition === 'visibility 1s' && sticky.style.position === 'sticky', '截图后恢复浮层样式');
+            assert(document.documentElement.style.scrollBehavior === 'smooth' && !document.documentElement.style.scrollbarWidth, '截图后恢复页面样式');
+            assert(document.getElementById('deepl-page-capture-toast')?.dataset.tone === 'success', '完成后提示保存');
+
+            options.captureTab = async () => { throw new Error('整页截图失败测试'); };
+            const failed = await DeepL.createPageCapture(options).capture({ id: 1 }).catch(error => error.message);
+            assert(failed === '整页截图失败测试', '应报告捕获错误');
+            assert(Math.abs(window.scrollY - initialScroll) <= 1 && !top.style.visibility && sticky.style.position === 'sticky', '失败后也应恢复页面');
+            assert(document.getElementById('deepl-page-capture-toast')?.dataset.tone === 'error', '失败后提示错误');
+            document.documentElement.style.scrollBehavior = '';
+        });
         results.textContent = `PASS (${passed.length})\n${passed.join('\n')}`;
         results.dataset.status = 'passed';
     } catch (error) {

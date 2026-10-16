@@ -28,10 +28,12 @@ function setup() {
             },
             tabs: {
                 sendMessage: async (id, message, options) => { messages.push({ id, message, options }); },
+                get: async id => ({ id, windowId: 1 }),
                 query: async () => [{ id: state.activeId }],
                 captureVisibleTab: async () => { state.captures++; return 'data:image/png;base64,capture'; }
             },
-            downloads: { download: (options, done) => { state.downloads.push(options); done(1); } }
+            downloads: { download: (options, done) => { state.downloads.push(options); done(1); } },
+            action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} }
         }
     });
     context.importScripts = (...files) => files.forEach(file => vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context));
@@ -43,7 +45,7 @@ function setup() {
 test('右键入口和 iframe 定向路由', async () => {
     const { hooks, menus, messages } = setup();
     hooks.install();
-    assert.equal(menus.length, 5);
+    assert.equal(menus.length, 6);
     await hooks.click({ menuItemId: 'translateWithDeepL', selectionText: 'Hello', frameId: 4 }, { id: 7 });
     await hooks.click({ menuItemId: 'translateBilingualPageWithDeepL', frameId: 4 }, { id: 7 });
     await hooks.click({ menuItemId: 'restorePageWithDeepL' }, { id: 7 });
@@ -55,6 +57,22 @@ test('右键入口和 iframe 定向路由', async () => {
     assert.equal(messages[3].options.frameId, 0);
     await hooks.click({ menuItemId: 'translatePageWithDeepL' }, null);
     assert.equal(messages.length, 4);
+});
+
+test('整页截图只与顶层页面通信，页面无响应时报告错误', async () => {
+    const { hooks, messages, dispatch } = setup();
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+        await hooks.click({ menuItemId: 'capturePageScreenshot', frameId: 3 }, { id: 7, windowId: 1 });
+    } finally {
+        console.warn = warn;
+    }
+    assert.deepEqual({ ...messages[0].message }, { action: 'pageCapture', step: 'prepare' });
+    assert.equal(messages[0].options.frameId, 0);
+    const response = await dispatch({ action: 'capturePage', tabId: 7 });
+    assert.equal(response.success, false);
+    assert.match(response.error, /页面没有响应/);
 });
 
 test('后台读取凭证，兼容单条和批量翻译并报告缺失Key', async () => {

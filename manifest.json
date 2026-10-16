@@ -39,6 +39,7 @@
                 "src/content/selection.js",
                 "src/content/page-dom.js",
                 "src/content/page-translation.js",
+                "src/content/page-capture.js",
                 "content.js"
             ],
             "css": [

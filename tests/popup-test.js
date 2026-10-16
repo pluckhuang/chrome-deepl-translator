@@ -32,7 +32,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         get('translateBtn').click();
         await turn();
         assert(get('result').textContent === '译文：Popup text.', '弹窗应经统一服务显示译文');
-        result.textContent = 'PASS (1)\n弹窗设置、保存失败、语言持久化、请求去重与重试';
+        get('capturePageBtn').click();
+        await turn(); await turn();
+        assert(translationMock.pageCaptures[0].tabId === 1, '整页截图应发往当前标签页');
+        assert(get('result').textContent.includes('整页截图已生成') && !get('capturePageBtn').disabled, '整页截图完成后提示保存');
+        translationMock.pageCaptureResponse = { success: false, error: '无法在此页面截图' };
+        get('capturePageBtn').click();
+        await turn(); await turn();
+        assert(get('result').textContent.includes('无法在此页面截图'), '整页截图失败应提示原因');
+        result.textContent = 'PASS (2)\n弹窗设置、保存失败、语言持久化、请求去重与重试\n整页截图按钮';
         result.dataset.status = 'passed';
     } catch (error) {
         result.textContent = `FAIL: ${error.message}`;

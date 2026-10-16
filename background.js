@@ -1,5 +1,5 @@
 // Service worker：右键路由、统一翻译服务、截图与下载。
-importScripts('src/shared/core.js', 'src/background/translation-service.js');
+importScripts('src/shared/core.js', 'src/background/translation-service.js', 'src/background/page-capture.js');
 
 const pageMenus = [
     { id: 'translatePageWithDeepL', title: '翻译整个网页', message: { action: 'translateFullPage', mode: 'replace' } },
@@ -18,6 +18,7 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.removeAll(() => {
         chrome.contextMenus.create({ id: 'translateWithDeepL', title: '使用 DeepL 翻译选中文本', contexts: ['selection'] });
         pageMenus.forEach(({ id, title }) => chrome.contextMenus.create({ id, title, contexts: ['page'] }));
+        chrome.contextMenus.create({ id: 'capturePageScreenshot', title: '保存整个网页截图', contexts: ['page'] });
         chrome.contextMenus.create({
             id: 'captureXTweetScreenshot', title: '保存当前帖子截图', contexts: ['all'],
             documentUrlPatterns: ['*://twitter.com/*', '*://x.com/*']
@@ -27,6 +28,9 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     if (tab?.id == null) return;
+    if (info.menuItemId === 'capturePageScreenshot') {
+        return pageCapture.capture(tab).catch(error => console.warn('整页截图失败:', error.message));
+    }
     const pageMenu = pageMenus.find(menu => menu.id === info.menuItemId);
     let message = pageMenu?.message;
     if (info.menuItemId === 'translateWithDeepL' && info.selectionText) {
@@ -58,16 +62,41 @@ function downloadImage(request) {
     });
 }
 
-async function captureVisibleTab(sender) {
-    if (!sender.tab) throw new Error('请从帖子页面发起截图');
-    const [activeTab] = await chrome.tabs.query({ active: true, windowId: sender.tab.windowId });
-    if (activeTab?.id !== sender.tab.id) throw new Error('截图期间请保持帖子标签页处于前台');
-    const dataUrl = await chrome.tabs.captureVisibleTab(sender.tab.windowId, { format: 'png' });
+async function captureVisibleTab(tab) {
+    if (!tab) throw new Error('请从网页发起截图');
+    const [activeTab] = await chrome.tabs.query({ active: true, windowId: tab.windowId });
+    if (activeTab?.id !== tab.id) throw new Error('截图期间请保持该标签页处于前台');
+    const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
     // 捕获过程中也可能切换标签页，丢弃这种截图。
-    const [currentTab] = await chrome.tabs.query({ active: true, windowId: sender.tab.windowId });
-    if (currentTab?.id !== sender.tab.id) throw new Error('截图期间标签页已切换，请重试');
+    const [currentTab] = await chrome.tabs.query({ active: true, windowId: tab.windowId });
+    if (currentTab?.id !== tab.id) throw new Error('截图期间标签页已切换，请重试');
     return { dataUrl };
 }
+
+async function sendToPage(tabId, message) {
+    let response;
+    try {
+        response = await chrome.tabs.sendMessage(tabId, message, { frameId: 0 });
+    } catch (error) {
+        if (/Receiving end does not exist|Could not establish connection/i.test(error.message)) {
+            throw new Error('无法在此页面截图，请刷新网页后重试（浏览器内部页面不支持）');
+        }
+        throw error;
+    }
+    if (!response?.success) throw new Error(response?.error || '页面没有响应，请刷新网页后重试');
+    return response;
+}
+
+const pageCapture = DeepL.createPageCapture({
+    sendToTab: sendToPage,
+    captureTab: async tab => (await captureVisibleTab(tab)).dataUrl,
+    saveImage: downloadImage,
+    // 截图期间页面上不能放进度提示，进度显示在工具栏图标上。
+    setProgress(tabId, text) {
+        if (text) chrome.action.setBadgeBackgroundColor({ tabId, color: '#0066cc' }).catch(() => {});
+        chrome.action.setBadgeText({ tabId, text }).catch(() => {});
+    }
+});
 
 const handlers = {
     async getSettings() {
@@ -79,7 +108,8 @@ const handlers = {
         return Array.isArray(request.text) ? { translations } : { translation: translations[0] };
     },
     downloadImage,
-    captureVisibleTab: (_, sender) => captureVisibleTab(sender)
+    captureVisibleTab: (_, sender) => captureVisibleTab(sender.tab),
+    capturePage: async request => pageCapture.capture(await chrome.tabs.get(request.tabId))
 };
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {

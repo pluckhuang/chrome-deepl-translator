@@ -19,6 +19,10 @@
                     mock.captureCalls++;
                     if (mock.capture) return mock.capture(callback);
                 }
+                if (message.action === 'capturePage') {
+                    mock.pageCaptures = [...(mock.pageCaptures || []), message];
+                    return callback(mock.pageCaptureResponse || { success: true, truncated: false });
+                }
                 if (message.action === 'downloadImage') {
                     mock.downloads.push(message);
                     return callback({ success: true, downloadId: 1 });

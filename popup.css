@@ -108,3 +108,11 @@ button:disabled {
     background-color: #45a049;
 }
 .result { white-space: pre-wrap; overflow-wrap: anywhere; }
+.capture-btn {
+    margin-top: 15px;
+    background-color: #5f6b7a;
+}
+
+.capture-btn:hover {
+    background-color: #4b5563;
+}

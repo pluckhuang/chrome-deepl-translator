@@ -1,7 +1,7 @@
 // 弹窗只负责输入和显示；请求统一经过后台翻译服务。
 (() => {
     document.addEventListener('DOMContentLoaded', () => {
-        const elements = Object.fromEntries(['apiKey', 'saveApiKey', 'sourceText', 'sourceLang', 'targetLang', 'translateBtn', 'result']
+        const elements = Object.fromEntries(['apiKey', 'saveApiKey', 'sourceText', 'sourceLang', 'targetLang', 'translateBtn', 'result', 'capturePageBtn']
             .map(id => [id, document.getElementById(id)]));
 
         function showResult(text, type = 'success') {
@@ -75,6 +75,25 @@
             } finally {
                 elements.translateBtn.disabled = false;
                 elements.translateBtn.textContent = '翻译';
+            }
+        });
+        elements.capturePageBtn.addEventListener('click', async () => {
+            if (elements.capturePageBtn.disabled) return;
+            elements.capturePageBtn.disabled = true;
+            elements.capturePageBtn.textContent = '正在截取整页...';
+            showResult('页面会自动滚动一遍，请保持当前标签页在前台，完成后会弹出保存窗口', 'info');
+            try {
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                if (tab?.id == null) throw new Error('没有找到当前标签页');
+                const response = await DeepL.client.request({ action: 'capturePage', tabId: tab.id });
+                showResult(response.truncated
+                    ? `页面过长，已截取前 ${response.capturedHeight}px，请在弹出的窗口中选择保存位置`
+                    : '整页截图已生成，请在弹出的窗口中选择保存位置');
+            } catch (error) {
+                showResult(`截图失败：${error.message}`, 'error');
+            } finally {
+                elements.capturePageBtn.disabled = false;
+                elements.capturePageBtn.textContent = '📸 保存整页截图';
             }
         });
         loadSettings();
