@@ -55,17 +55,19 @@
             <div class="help-text">获取 API Key: <a href="https://openrouter.ai/keys" target="_blank">OpenRouter</a></div>
         </div>
         <div class="section">
-            <label for="openrouterModel">模型名称:</label>
-            <input type="text" id="openrouterModel" list="openrouterModels" placeholder="tencent/hy-mt2-30b-a3b">
-            <datalist id="openrouterModels">
-                <option value="tencent/hy-mt2-30b-a3b">腾讯翻译专用旗舰 · 输入 $0.07 / 输出 $0.30</option>
-                <option value="qwen/qwen3.8-flash">通用，中文强 · $0.15 / $0.47</option>
-                <option value="anthropic/claude-haiku-5.5">通用，听指令 · $0.10 / $0.50</option>
-                <option value="openai/gpt-6-luna">通用 · $0.10 / $0.50</option>
-                <option value="deepseek/deepseek-v4.1-flash">通用 · $0.04 / $0.68</option>
-                <option value="qwen/qwen3.8-max-0902">通用旗舰 · $2 / $6</option>
-            </datalist>
-            <div class="help-text">可填任意 OpenRouter 模型名；价格为每百万 token，2026 年 10 月数据</div>
+            <label for="openrouterModelSelect">模型:</label>
+            <select id="openrouterModelSelect">
+                <option value="xiaomi/mimo-v2.6-pro">小米 MiMo-V2.6-Pro · 通用旗舰 · $0.44 / $0.87</option>
+                <option value="tencent/hy-mt2-30b-a3b">腾讯 Hy-MT2-30B · 翻译专用 · $0.07 / $0.30</option>
+                <option value="qwen/qwen3.8-flash">Qwen3.8-Flash · 通用，中文强 · $0.15 / $0.47</option>
+                <option value="anthropic/claude-haiku-5.5">Claude Haiku 5.5 · 通用，听指令 · $0.10 / $0.50</option>
+                <option value="openai/gpt-6-luna">GPT-6 Luna · 通用 · $0.10 / $0.50</option>
+                <option value="deepseek/deepseek-v4.1-flash">DeepSeek V4.1 Flash · 通用 · $0.04 / $0.68</option>
+                <option value="qwen/qwen3.8-max-0902">Qwen3.8-Max · 通用旗舰 · $2 / $6</option>
+                <option value="custom">其他模型（手动填写）</option>
+            </select>
+            <input type="text" id="openrouterModel" placeholder="填写 OpenRouter 模型名，如 vendor/model" hidden>
+            <div class="help-text">选择后立即生效；价格为每百万 token 输入 / 输出，2026 年 10 月数据</div>
         </div>
         <div class="button-row">
             <button class="save-btn" id="saveOpenrouter">保存设置</button>

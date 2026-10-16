@@ -187,7 +187,7 @@ test('OpenRouter 带 Key 请求，翻译模型用编号要求模板，通用模�
         requests.push({ url, headers: options.headers, body: JSON.parse(options.body) });
         return chat('我们下周再碰一下，过一遍计划。');
     };
-    await createService(fetchImpl, openrouter()).translate({ text: "Let's touch base next week." });
+    await createService(fetchImpl, openrouter({ openrouterModel: 'tencent/hy-mt2-30b-a3b' })).translate({ text: "Let's touch base next week." });
     const [mt] = requests;
     assert.equal(mt.url, 'https://openrouter.ai/api/v1/chat/completions');
     assert.equal(mt.headers.Authorization, 'Bearer sk-or-test');
@@ -210,7 +210,7 @@ test('OpenRouter 带 Key 请求，翻译模型用编号要求模板，通用模�
 
 test('OpenRouter 的 Key、余额、模型和限流错误有明确提示，余额不足不自动换引擎', async () => {
     const cases = [
-        [401, /API Key 无效/], [402, /余额不足.*切换翻译引擎/], [404, /没有模型 tencent\/hy-mt2-30b-a3b/], [429, /过于频繁/],
+        [401, /API Key 无效/], [402, /余额不足.*切换翻译引擎/], [404, /没有模型 xiaomi\/mimo-v2\.6-pro/], [429, /过于频繁/],
         [400, /OpenRouter 出错：bad request/]
     ];
     for (const [status, message] of cases) {

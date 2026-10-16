@@ -13,7 +13,7 @@
         localEndpoint: 'http://127.0.0.1:11434/v1',
         localModel: 'hf.co/mradermacher/Hunyuan-MT-7B-GGUF:Q5_K_M',
         openrouterApiKey: '',
-        openrouterModel: 'tencent/hy-mt2-30b-a3b'
+        openrouterModel: 'xiaomi/mimo-v2.6-pro'
     };
     app.TRANSLATION_SETTING_KEYS = ['deeplApiKey', ...Object.keys(app.TRANSLATION_DEFAULTS)];
     app.PROVIDER_NAMES = { deepl: 'DeepL', local: '本地模型', openrouter: 'OpenRouter' };

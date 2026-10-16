@@ -135,7 +135,8 @@ test('OpenRouter 使用保存的 Key 和模型，连接测试返回花费', asyn
     const [request] = state.fetches;
     assert.equal(request.url, 'https://openrouter.ai/api/v1/chat/completions');
     assert.equal(request.headers.Authorization, 'Bearer sk-or-saved');
-    assert.equal(request.body.model, 'tencent/hy-mt2-30b-a3b', '默认用 Hy-MT2-30B');
+    assert.equal(request.body.model, 'xiaomi/mimo-v2.6-pro', '默认用 MiMo-V2.6-Pro');
+    assert.deepEqual({ ...request.body.reasoning }, { effort: 'low', exclude: true }, '通用模型把思考调到最低');
     const tested = await dispatch({ action: 'testModel', provider: 'openrouter', openrouterApiKey: 'sk-or-unsaved', openrouterModel: 'qwen/qwen3.8-flash' });
     assert.equal(tested.cost, 0.000012);
     const last = state.fetches.at(-1);

@@ -3,7 +3,7 @@
     document.addEventListener('DOMContentLoaded', () => {
         const elements = Object.fromEntries(['apiKey', 'saveApiKey', 'sourceText', 'sourceLang', 'targetLang', 'translateBtn', 'result', 'capturePageBtn',
             'translationProvider', 'deeplSettings', 'localSettings', 'localEndpoint', 'localModel', 'saveLocal', 'testLocal',
-            'openrouterSettings', 'openrouterApiKey', 'openrouterModel', 'saveOpenrouter', 'testOpenrouter', 'resultMeta']
+            'openrouterSettings', 'openrouterApiKey', 'openrouterModelSelect', 'openrouterModel', 'saveOpenrouter', 'testOpenrouter', 'resultMeta']
             .map(id => [id, document.getElementById(id)]));
 
         function showResult(text, type = 'success', meta = '') {
@@ -24,10 +24,18 @@
             };
         }
         function readOpenrouterSettings() {
+            const select = elements.openrouterModelSelect;
             return {
                 openrouterApiKey: DeepL.normalizeApiKey(elements.openrouterApiKey.value),
-                openrouterModel: elements.openrouterModel.value.trim()
+                openrouterModel: select.value === 'custom' ? elements.openrouterModel.value.trim() : select.value
             };
+        }
+        // 推荐列表里没有的模型显示为「其他模型」，并在输入框里填入模型名。
+        function showOpenrouterModel(model) {
+            const listed = [...elements.openrouterModelSelect.options].some(option => option.value === model && model !== 'custom');
+            elements.openrouterModelSelect.value = listed ? model : 'custom';
+            elements.openrouterModel.value = listed ? '' : model;
+            elements.openrouterModel.hidden = listed;
         }
         // 测试连接用输入框里尚未保存的设置，显示译文、耗时和 OpenRouter 报告的花费。
         async function testModel(provider, settings) {
@@ -52,6 +60,7 @@
                 button.textContent = text;
             }
         }
+        let modelTouched = false;
         async function loadSettings() {
             try {
                 const settings = { ...DeepL.TRANSLATION_DEFAULTS, ...await chrome.storage.sync.get([...DeepL.TRANSLATION_SETTING_KEYS, 'sourceLang', 'targetLang']) };
@@ -60,7 +69,7 @@
                 if (!elements.localEndpoint.value) elements.localEndpoint.value = settings.localEndpoint;
                 if (!elements.localModel.value) elements.localModel.value = settings.localModel;
                 if (!elements.openrouterApiKey.value) elements.openrouterApiKey.value = settings.openrouterApiKey || '';
-                if (!elements.openrouterModel.value) elements.openrouterModel.value = settings.openrouterModel;
+                if (!modelTouched) showOpenrouterModel(settings.openrouterModel);
                 for (const id of ['translationProvider', 'sourceLang', 'targetLang']) {
                     if ([...elements[id].options].some(option => option.value === settings[id])) elements[id].value = settings[id];
                 }
@@ -132,6 +141,22 @@
             if (!settings.localEndpoint || !settings.localModel) return showResult('请先填写服务地址和模型名称', 'error');
             await testModel('local', settings);
         }));
+        elements.openrouterModelSelect.addEventListener('change', async () => {
+            modelTouched = true;
+            const custom = elements.openrouterModelSelect.value === 'custom';
+            elements.openrouterModel.hidden = !custom;
+            if (custom) {
+                elements.openrouterModel.focus();
+                return showResult('填写模型名后点「保存设置」', 'info');
+            }
+            try {
+                await chrome.storage.sync.set({ openrouterModel: elements.openrouterModelSelect.value });
+                showResult(`已切换为 ${elements.openrouterModelSelect.value}`);
+            } catch (error) {
+                showResult(`切换失败：${error.message}`, 'error');
+            }
+        });
+        elements.openrouterModel.addEventListener('input', () => { modelTouched = true; });
         elements.saveOpenrouter.addEventListener('click', () => withButton(elements.saveOpenrouter, '保存中...', async () => {
             const settings = readOpenrouterSettings();
             if (!settings.openrouterApiKey) return showResult('请输入 OpenRouter API Key', 'error');
@@ -166,7 +191,7 @@
                 const translation = await DeepL.client.translate(text, {
                     ...(deepl ? { apiKey } : {}), sourceLang: elements.sourceLang.value, targetLang: elements.targetLang.value
                 });
-                const model = { local: elements.localModel.value.trim(), openrouter: elements.openrouterModel.value.trim() }[provider];
+                const model = { local: elements.localModel.value.trim(), openrouter: readOpenrouterSettings().openrouterModel }[provider];
                 showResult(translation, 'success', [DeepL.PROVIDER_NAMES[provider], model, `${((Date.now() - started) / 1000).toFixed(1)} 秒`].filter(Boolean).join(' · '));
             } catch (error) {
                 showResult(`翻译失败：${error.message}`, 'error');

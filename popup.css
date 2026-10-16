@@ -125,6 +125,10 @@ button:disabled {
     margin-top: 0;
 }
 
+#openrouterModel {
+    margin-top: 8px;
+}
+
 .test-btn {
     background-color: #5f6b7a;
 }
