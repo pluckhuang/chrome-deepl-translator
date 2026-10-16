@@ -6,8 +6,10 @@ const pageMenus = [
     { id: 'translateBilingualPageWithDeepL', title: '全文双语翻译（保留原文）', message: { action: 'translateFullPage', mode: 'bilingual' } },
     { id: 'restorePageWithDeepL', title: '恢复网页原文', message: { action: 'restoreFullPage' } }
 ];
+// 本地模型同时发 4 个请求，配合 Ollama 的 OLLAMA_NUM_PARALLEL=4；未开启并行时请求只会在 Ollama 端排队。
 const translator = DeepL.createTranslationService({
-    getSettings: () => chrome.storage.sync.get(DeepL.TRANSLATION_SETTING_KEYS)
+    getSettings: () => chrome.storage.sync.get(DeepL.TRANSLATION_SETTING_KEYS),
+    localConcurrency: 4
 });
 const LOCAL_TEST_TEXT = 'The devil is in the details.';
 const OLLAMA_ORIGIN_RULE_ID = 1;
@@ -125,8 +127,8 @@ const handlers = {
         const configured = provider === 'local'
             ? Boolean(DeepL.normalizeEndpoint(settings.localEndpoint) && String(settings.localModel || '').trim())
             : Boolean(DeepL.normalizeApiKey(settings.deeplApiKey));
-        // 本地模型逐段生成较慢，全文翻译用小批次，进度和「恢复原文」才能及时响应。
-        return { provider, configured, batchSize: provider === 'local' ? 4 : 30 };
+        // 本地模型逐段生成较慢，全文翻译用小批次，进度和「恢复原文」才能及时响应；8 段一批让 4 路并发持续排满。
+        return { provider, configured, batchSize: provider === 'local' ? 8 : 30 };
     },
     async translate(request) {
         // 引擎由弹窗里保存的设置决定；网页侧的请求不能指定引擎或本地地址。

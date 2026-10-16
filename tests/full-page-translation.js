@@ -131,7 +131,7 @@
         });
 
         await test('本地模型小批次翻译，切换引擎后不复用旧译文', async () => {
-            reset(Array.from({ length: 9 }, (_, index) => `<p>Engine ${index}.</p>`).join(''));
+            reset(Array.from({ length: 10 }, (_, index) => `<p>Engine ${index}.</p>`).join(''));
             await translateFullPage('bilingual');
             assert(translationMock.calls.length === 1, 'DeepL 一次请求 30 段');
             translationMock.storage.translationProvider = 'local';
@@ -142,13 +142,28 @@
                 callback({ success: true, translations: message.text.map(text => `本地：${text}`) });
             };
             await translateFullPage('bilingual');
-            assert(translationMock.calls.map(batch => batch.length).join() === '4,4,1', '本地模型按 4 段一批');
+            assert(translationMock.calls.map(batch => batch.length).join() === '8,2', '本地模型按 8 段一批');
             assert(progress.includes('本地模型'), '进度提示应注明引擎');
             assert(translations()[0].textContent === '本地：Engine 0.', '切换引擎后应重新翻译');
             translationMock.storage.translationProvider = 'deepl';
             translationMock.calls = [];
             await translateFullPage('bilingual');
             assert(translationMock.calls.length === 0 && translations()[0].textContent === '译文：Engine 0.', '切回原引擎复用它自己的缓存');
+        });
+
+        await test('先翻译屏幕内的段落，再翻译下方和上方', async () => {
+            reset(Array.from({ length: 80 }, (_, index) => `<p style="height:60px;margin:0">Para ${index}.</p>`).join(''));
+            const paragraphs = [...fixture.querySelectorAll('p')];
+            window.scrollTo({ top: paragraphs[40].offsetTop, behavior: 'instant' });
+            const visible = paragraphs.filter(node => { const rect = node.getBoundingClientRect(); return rect.bottom >= 0 && rect.top <= innerHeight; })
+                .map(node => node.textContent);
+            await translateFullPage('bilingual');
+            const order = translationMock.calls.flat();
+            assert(visible.length > 1 && visible[0] !== 'Para 0.', '测试前应已滚到页面中部');
+            assert(order.slice(0, visible.length).join() === visible.join(), '屏幕内段落按原文顺序最先翻译');
+            assert(order.at(-1) === 'Para 0.' || order.indexOf('Para 0.') > order.indexOf('Para 79.'), '屏幕上方的段落最后翻译');
+            assert(translations().length === 80, '所有段落都应翻译');
+            window.scrollTo({ top: 0, behavior: 'instant' });
         });
 
         restoreFullPage();

@@ -27,6 +27,13 @@
         }
         return values;
     }
+    // 先译屏幕内的段落，再译下方、最后译上方；同组内保持原文顺序。本地模型较慢时，正在读的地方最先出译文。
+    function visibleFirst(units) {
+        return units.map((unit, index) => {
+            const rect = unit.container.getBoundingClientRect();
+            return { unit, index, group: rect.bottom < 0 ? 2 : rect.top <= window.innerHeight ? 0 : 1 };
+        }).sort((a, b) => a.group - b.group || a.index - b.index).map(item => item.unit);
+    }
     function finishMessage(run) {
         if (!run.failed) return `✅ ${run.label}完成！右键可恢复原文`;
         const reason = run.error || '页面内容已变化';
@@ -47,7 +54,7 @@
             const batchSize = settings.batchSize || 30;
             toast.textContent = `🔄 正在准备${run.label}（${engine}）...`;
             renderer.restore();
-            const units = pageDom.collectUnits(mode);
+            const units = visibleFirst(pageDom.collectUnits(mode));
             run.total = units.length;
             if (!units.length) {
                 toast.textContent = '⚠️ 未找到需要翻译的文本';

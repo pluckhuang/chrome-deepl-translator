@@ -104,7 +104,7 @@ test('按弹窗保存的引擎翻译，网页请求不能指定引擎，连接�
     assert.equal((await dispatch({ action: 'getSettings' })).batchSize, 30);
     state.settings = { translationProvider: 'local' };
     const settings = await dispatch({ action: 'getSettings' });
-    assert.deepEqual([settings.provider, settings.configured, settings.batchSize], ['local', true, 4], '本地模型使用默认地址和模型');
+    assert.deepEqual([settings.provider, settings.configured, settings.batchSize], ['local', true, 8], '本地模型使用默认地址和模型');
     assert.equal((await dispatch({ action: 'translate', text: 'Hello' })).translation, '细节决定成败。');
     assert.equal(state.fetches[0].url, 'http://127.0.0.1:11434/v1/chat/completions');
     assert.equal(state.fetches[0].body.model, 'hf.co/mradermacher/Hunyuan-MT-7B-GGUF:Q5_K_M');

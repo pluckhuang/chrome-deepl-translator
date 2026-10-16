@@ -16,7 +16,7 @@
                 const mock = translationMock;
                 if (message.action === 'getSettings') {
                     const local = mock.storage.translationProvider === 'local';
-                    return callback({ success: true, provider: local ? 'local' : 'deepl', configured: local || Boolean(mock.key), batchSize: local ? 4 : 30 });
+                    return callback({ success: true, provider: local ? 'local' : 'deepl', configured: local || Boolean(mock.key), batchSize: local ? 8 : 30 });
                 }
                 if (message.action === 'testLocalModel') {
                     mock.localTests = [...(mock.localTests || []), message];
