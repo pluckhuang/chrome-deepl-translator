@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         assert(translationMock.storage.localEndpoint === 'http://127.0.0.1:1234/v1' && translationMock.storage.localModel === 'qwen3-8b', '保存清理后的本地设置');
         get('testLocal').click();
         await turn(); await turn();
-        assert(translationMock.localTests[0].localModel === 'qwen3-8b', '测试连接使用输入框里的设置');
+        assert(translationMock.modelTests[0].provider === 'local' && translationMock.modelTests[0].localModel === 'qwen3-8b', '测试连接使用输入框里的设置');
         assert(get('result').textContent.includes('1.2 秒') && get('result').textContent.includes('细节决定成败'), '显示测试译文和耗时');
         get('apiKey').value = '';
         get('sourceText').value = 'Local text.';
@@ -68,7 +68,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         await turn();
         assert(get('result').textContent === '本地译文' && localRequest.apiKey === undefined, '本地模型不需要 API Key');
         translationMock.respond = null;
-        result.textContent = 'PASS (3)\n弹窗设置、保存失败、语言持久化、请求去重与重试\n整页截图按钮\n翻译引擎切换与本地模型设置';
+        assert(get('resultMeta').textContent.includes('本地模型 · qwen3-8b'), '译文下方注明引擎和模型');
+        get('translationProvider').value = 'openrouter';
+        get('translationProvider').dispatchEvent(new Event('change'));
+        await turn();
+        assert(get('localSettings').hidden && !get('openrouterSettings').hidden && get('deeplSettings').hidden, '切换后只显示 OpenRouter 设置');
+        assert(get('openrouterModel').value === 'tencent/hy-mt2-30b-a3b', '填入默认 OpenRouter 模型');
+        get('saveOpenrouter').click();
+        await turn();
+        assert(get('result').textContent.includes('API Key') && translationMock.storage.openrouterApiKey === undefined, '没有 Key 时不能保存');
+        get('openrouterApiKey').value = ' sk-or-test\u200b ';
+        get('openrouterModel').value = ' qwen/qwen3.8-flash ';
+        get('saveOpenrouter').click();
+        await turn();
+        assert(translationMock.storage.openrouterApiKey === 'sk-or-test' && translationMock.storage.openrouterModel === 'qwen/qwen3.8-flash', '保存清理后的 OpenRouter 设置');
+        get('testOpenrouter').click();
+        await turn(); await turn();
+        const openrouterTest = translationMock.modelTests.at(-1);
+        assert(openrouterTest.provider === 'openrouter' && openrouterTest.openrouterApiKey === 'sk-or-test', '测试连接发往 OpenRouter');
+        assert(get('result').textContent.includes('$0.000021'), '显示本次花费');
+        result.textContent = 'PASS (4)\n弹窗设置、保存失败、语言持久化、请求去重与重试\n整页截图按钮\n翻译引擎切换与本地模型设置\nOpenRouter 设置与测试连接';
         result.dataset.status = 'passed';
     } catch (error) {
         result.textContent = `FAIL: ${error.message}`;

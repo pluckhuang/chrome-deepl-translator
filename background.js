@@ -11,7 +11,7 @@ const translator = DeepL.createTranslationService({
     getSettings: () => chrome.storage.sync.get(DeepL.TRANSLATION_SETTING_KEYS),
     localConcurrency: 4
 });
-const LOCAL_TEST_TEXT = 'The devil is in the details.';
+const TEST_TEXT = "Let's touch base next week to review the plan.";
 const OLLAMA_ORIGIN_RULE_ID = 1;
 
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -123,12 +123,14 @@ const pageCapture = DeepL.createPageCapture({
 const handlers = {
     async getSettings() {
         const settings = { ...DeepL.TRANSLATION_DEFAULTS, ...await chrome.storage.sync.get(DeepL.TRANSLATION_SETTING_KEYS) };
-        const provider = settings.translationProvider === 'local' ? 'local' : 'deepl';
-        const configured = provider === 'local'
-            ? Boolean(DeepL.normalizeEndpoint(settings.localEndpoint) && String(settings.localModel || '').trim())
-            : Boolean(DeepL.normalizeApiKey(settings.deeplApiKey));
-        // 本地模型逐段生成较慢，全文翻译用小批次，进度和「恢复原文」才能及时响应；8 段一批让 4 路并发持续排满。
-        return { provider, configured, batchSize: provider === 'local' ? 8 : 30 };
+        const provider = ['local', 'openrouter'].includes(settings.translationProvider) ? settings.translationProvider : 'deepl';
+        const configured = {
+            deepl: () => Boolean(DeepL.normalizeApiKey(settings.deeplApiKey)),
+            local: () => Boolean(DeepL.normalizeEndpoint(settings.localEndpoint) && String(settings.localModel || '').trim()),
+            openrouter: () => Boolean(DeepL.normalizeApiKey(settings.openrouterApiKey) && String(settings.openrouterModel || '').trim())
+        }[provider]();
+        // 大模型逐段生成较慢，全文翻译用小批次，进度和「恢复原文」才能及时响应；8 段一批让并发持续排满。
+        return { provider, configured, batchSize: provider === 'deepl' ? 30 : 8 };
     },
     async translate(request) {
         // 引擎由弹窗里保存的设置决定；网页侧的请求不能指定引擎或本地地址。
@@ -136,14 +138,12 @@ const handlers = {
         const translations = await translator.translate({ text, sourceLang, targetLang, apiKey });
         return Array.isArray(request.text) ? { translations } : { translation: translations[0] };
     },
-    async testLocalModel(request) {
-        const started = Date.now();
-        const [translation] = await translator.translate({
-            text: LOCAL_TEST_TEXT, provider: 'local', targetLang: 'ZH', noCache: true,
-            localEndpoint: request.localEndpoint, localModel: request.localModel
-        });
-        return { translation, elapsed: Date.now() - started };
-    },
+    // 弹窗「测试连接」：用输入框里尚未保存的设置试翻一句。
+    testModel: request => translator.testModel({
+        text: TEST_TEXT, provider: request.provider,
+        localEndpoint: request.localEndpoint, localModel: request.localModel,
+        openrouterApiKey: request.openrouterApiKey, openrouterModel: request.openrouterModel
+    }),
     downloadImage,
     captureVisibleTab: (_, sender) => captureVisibleTab(sender.tab),
     capturePage: async request => pageCapture.capture(await chrome.tabs.get(request.tabId))

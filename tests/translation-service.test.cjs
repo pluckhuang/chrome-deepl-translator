@@ -179,6 +179,56 @@ test('本地模型的连接、权限、模型缺失、空结果和超时都有�
     await assert.rejects(createService(async () => chat('x'), localSettings({ localEndpoint: 'ftp://host' })).translate({ text: 'Hello' }), /服务地址/);
 });
 
+const openrouter = (extra = {}) => ({ getSettings: async () => ({ translationProvider: 'openrouter', openrouterApiKey: 'sk-or-test', ...extra }) });
+
+test('OpenRouter 带 Key 请求，翻译模型用编号要求模板，通用模型关掉多余思考', async () => {
+    const requests = [];
+    const fetchImpl = async (url, options) => {
+        requests.push({ url, headers: options.headers, body: JSON.parse(options.body) });
+        return chat('我们下周再碰一下，过一遍计划。');
+    };
+    await createService(fetchImpl, openrouter()).translate({ text: "Let's touch base next week." });
+    const [mt] = requests;
+    assert.equal(mt.url, 'https://openrouter.ai/api/v1/chat/completions');
+    assert.equal(mt.headers.Authorization, 'Bearer sk-or-test');
+    assert.equal(mt.body.model, 'tencent/hy-mt2-30b-a3b');
+    assert.match(mt.body.messages[0].content, /^【待翻译文本】\nLet's touch base next week\.\n\n【翻译任务】\n1、忠实原文/);
+    assert.match(mt.body.messages[0].content, /5、将【待翻译文本】翻译为简体中文。$/);
+    assert.equal(mt.body.top_p, undefined, '30B-A3B 按官方建议不设 top_p');
+    assert.equal(mt.body.reasoning, undefined, '翻译模型不发思考参数');
+    await createService(fetchImpl, openrouter({ openrouterModel: 'anthropic/claude-haiku-5.5' })).translate({ text: 'Hello' });
+    const general = requests.at(-1).body;
+    assert.equal(general.messages[0].role, 'system');
+    assert.match(general.messages[0].content, /避免翻译腔/);
+    assert.deepEqual({ ...general.reasoning }, { effort: 'low', exclude: true });
+    await createService(fetchImpl, localSettings({ localModel: 'hf.co/tencent/Hy-MT2-7B-GGUF:Q4_K_M' })).translate({ text: 'Hello' });
+    const local = requests.at(-1);
+    assert.equal(local.headers.Authorization, undefined, '本地模型不带 Key');
+    assert.equal(local.body.top_p, 0.6, '本地 Hy-MT2-7B 使用官方采样');
+    assert.match(local.body.messages[0].content, /【翻译任务】/);
+});
+
+test('OpenRouter 的 Key、余额、模型和限流错误有明确提示，余额不足不自动换引擎', async () => {
+    const cases = [
+        [401, /API Key 无效/], [402, /余额不足.*切换翻译引擎/], [404, /没有模型 tencent\/hy-mt2-30b-a3b/], [429, /过于频繁/],
+        [400, /OpenRouter 出错：bad request/]
+    ];
+    for (const [status, message] of cases) {
+        const urls = [];
+        const service = createService(async url => {
+            urls.push(url);
+            return { ok: false, status, json: async () => ({ error: { message: 'bad request' } }) };
+        }, openrouter());
+        await assert.rejects(service.translate({ text: 'Hello' }), message);
+        assert.ok(urls.every(url => url.startsWith('https://openrouter.ai/')), '出错时不能改用其他引擎');
+    }
+    await assert.rejects(createService(() => Promise.reject(new TypeError('Failed to fetch')), openrouter()).translate({ text: 'Hello' }), /无法连接 OpenRouter/);
+    await assert.rejects(createService(async () => chat('x'), openrouter({ openrouterApiKey: '' })).translate({ text: 'Hello' }), /OpenRouter 的 API Key/);
+    const tested = await createService(async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: '你好' } }], usage: { cost: 0.00002, total_tokens: 40 } }) }), openrouter())
+        .testModel({ text: 'Hello', provider: 'openrouter', openrouterModel: 'qwen/qwen3.8-flash' });
+    assert.deepEqual([tested.translation, tested.cost, tested.tokens], ['你好', 0.00002, 40]);
+});
+
 test('缓存容量有界，最近访问的记录被保留', () => {
     const context = vm.createContext({});
     vm.runInContext(fs.readFileSync(path.join(root, 'src/shared/core.js'), 'utf8'), context);

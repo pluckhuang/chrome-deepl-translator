@@ -11,10 +11,12 @@
     app.TRANSLATION_DEFAULTS = {
         translationProvider: 'deepl',
         localEndpoint: 'http://127.0.0.1:11434/v1',
-        localModel: 'hf.co/mradermacher/Hunyuan-MT-7B-GGUF:Q5_K_M'
+        localModel: 'hf.co/mradermacher/Hunyuan-MT-7B-GGUF:Q5_K_M',
+        openrouterApiKey: '',
+        openrouterModel: 'tencent/hy-mt2-30b-a3b'
     };
     app.TRANSLATION_SETTING_KEYS = ['deeplApiKey', ...Object.keys(app.TRANSLATION_DEFAULTS)];
-    app.PROVIDER_NAMES = { deepl: 'DeepL', local: '本地模型' };
+    app.PROVIDER_NAMES = { deepl: 'DeepL', local: '本地模型', openrouter: 'OpenRouter' };
 
     // 页面和后台缓存都有容量上限，避免长时间浏览不断积累文本。
     app.TextCache = class {

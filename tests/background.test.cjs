@@ -13,8 +13,10 @@ function setup() {
     const context = vm.createContext({
         console, TextEncoder, AbortController, setTimeout, clearTimeout,
         fetch: async (url, options) => {
-            state.fetches.push({ url, body: JSON.parse(options.body) });
-            if (url.endsWith('/chat/completions')) return { ok: true, json: async () => ({ choices: [{ message: { content: '细节决定成败。' } }] }) };
+            state.fetches.push({ url, headers: options.headers, body: JSON.parse(options.body) });
+            if (url.endsWith('/chat/completions')) {
+                return { ok: true, json: async () => ({ choices: [{ message: { content: '细节决定成败。' } }], usage: { cost: 0.000012, total_tokens: 60 } }) };
+            }
             return { ok: true, json: async () => ({ translations: JSON.parse(options.body).text.map(text => ({ text: `译文：${text}` })) }) };
         },
         chrome: {
@@ -112,13 +114,33 @@ test('按弹窗保存的引擎翻译，网页请求不能指定引擎，连接�
     await dispatch({ action: 'translate', text: 'Page', provider: 'local', localEndpoint: 'http://evil.example' });
     assert.match(state.fetches.at(-1).url, /deepl\.com/, '网页侧请求只能使用已保存的引擎');
     for (let i = 0; i < 2; i++) {
-        const tested = await dispatch({ action: 'testLocalModel', localEndpoint: 'http://127.0.0.1:1234/v1', localModel: 'qwen3' });
+        const tested = await dispatch({ action: 'testModel', provider: 'local', localEndpoint: 'http://127.0.0.1:1234/v1', localModel: 'qwen3' });
         assert.equal(tested.translation, '细节决定成败。');
         assert.equal(typeof tested.elapsed, 'number');
     }
     assert.equal(state.fetches.filter(item => item.url === 'http://127.0.0.1:1234/v1/chat/completions').length, 2, '每次测试都应真实请求');
     state.settings = { translationProvider: 'local', localModel: ' ' };
     assert.equal((await dispatch({ action: 'getSettings' })).configured, false);
+    assert.match((await dispatch({ action: 'testModel', provider: 'deepl' })).error, /只能测试/);
+});
+
+test('OpenRouter 使用保存的 Key 和模型，连接测试返回花费', async () => {
+    const { dispatch, state } = setup();
+    state.settings = { translationProvider: 'openrouter' };
+    assert.equal((await dispatch({ action: 'getSettings' })).configured, false, '没有 Key 时未配置');
+    state.settings = { translationProvider: 'openrouter', openrouterApiKey: 'sk-or-saved' };
+    const settings = await dispatch({ action: 'getSettings' });
+    assert.deepEqual([settings.provider, settings.configured, settings.batchSize], ['openrouter', true, 8]);
+    assert.equal((await dispatch({ action: 'translate', text: 'Hello' })).translation, '细节决定成败。');
+    const [request] = state.fetches;
+    assert.equal(request.url, 'https://openrouter.ai/api/v1/chat/completions');
+    assert.equal(request.headers.Authorization, 'Bearer sk-or-saved');
+    assert.equal(request.body.model, 'tencent/hy-mt2-30b-a3b', '默认用 Hy-MT2-30B');
+    const tested = await dispatch({ action: 'testModel', provider: 'openrouter', openrouterApiKey: 'sk-or-unsaved', openrouterModel: 'qwen/qwen3.8-flash' });
+    assert.equal(tested.cost, 0.000012);
+    const last = state.fetches.at(-1);
+    assert.equal(last.headers.Authorization, 'Bearer sk-or-unsaved', '测试连接使用输入框里的 Key');
+    assert.deepEqual({ ...last.body.usage }, { include: true });
 });
 
 test('截图仅捕获发起请求的活动标签页，下载校验PNG数据', async () => {

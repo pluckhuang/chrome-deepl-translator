@@ -15,12 +15,12 @@
             sendMessage(message, callback) {
                 const mock = translationMock;
                 if (message.action === 'getSettings') {
-                    const local = mock.storage.translationProvider === 'local';
-                    return callback({ success: true, provider: local ? 'local' : 'deepl', configured: local || Boolean(mock.key), batchSize: local ? 8 : 30 });
+                    const provider = mock.storage.translationProvider || 'deepl';
+                    return callback({ success: true, provider, configured: provider !== 'deepl' || Boolean(mock.key), batchSize: provider === 'deepl' ? 30 : 8 });
                 }
-                if (message.action === 'testLocalModel') {
-                    mock.localTests = [...(mock.localTests || []), message];
-                    return callback(mock.localTestResponse || { success: true, translation: '细节决定成败。', elapsed: 1234 });
+                if (message.action === 'testModel') {
+                    mock.modelTests = [...(mock.modelTests || []), message];
+                    return callback(mock.modelTestResponse || { success: true, translation: '细节决定成败。', elapsed: 1234, cost: message.provider === 'openrouter' ? 0.000021 : undefined });
                 }
                 if (message.action === 'captureVisibleTab') {
                     mock.captureCalls++;
