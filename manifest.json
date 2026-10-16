@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "DeepL 段落翻译助手",
     "version": "1.0.0",
-    "description": "使用 DeepL API 划词与全文双语翻译，并可保存 X 帖子截图和整页长截图的 Chrome 扩展",
+    "description": "使用 DeepL API 或本地 Ollama 模型划词与全文双语翻译，并可保存 X 帖子截图和整页长截图的 Chrome 扩展",
     "permissions": [
         "activeTab",
         "storage",
