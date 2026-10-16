@@ -151,6 +151,32 @@
             assert(translationMock.calls.length === 0 && translations()[0].textContent === '译文：Engine 0.', '切回原引擎复用它自己的缓存');
         });
 
+        await test('Hacker News 式表格：不译序号和导航栏，不重复显示相同译文', async () => {
+            reset('<table><tbody>'
+                + '<tr><td><span class="pagetop"><b><a href="#">Hacker News</a></b> <a href="#">new</a> | <a href="#">past</a> | <a href="#">comments</a> | <a href="#">ask</a></span></td>'
+                + '<td><span class="pagetop"><a href="#">login</a></span></td></tr>'
+                + '<tr><td class="title"><span class="rank">1.</span></td><td class="title"><span class="titleline"><a href="#">Yet another way to invoke functions</a>'
+                + '<span class="sitebit"> (<a href="#"><span>ikaes.de</span></a>)</span></span></td></tr>'
+                + '<tr><td></td><td class="subtext"><span class="score">123 points</span> by <a href="#">aragonite</a> <a href="#">4 hours ago</a> | <a href="#">hide</a> | <a href="#">37 comments</a></td></tr>'
+                + '<tr><td class="title"><span class="rank">2.</span></td><td class="title"><span class="titleline"><a href="#">Muse Spark Open</a> (<a href="#">meta.ai</a>)</span></td></tr>'
+                + '</tbody></table>');
+            translationMock.respond = (message, callback) => callback({
+                success: true,
+                translations: message.text.map(text => text === 'Muse Spark Open (meta.ai)' ? 'Muse Spark Open（meta.ai）' : `译文：${text}`)
+            });
+            await translateFullPage('bilingual');
+            const sent = translationMock.calls.flat();
+            assert(!sent.includes('1.') && !sent.includes('2.'), '序号不应送去翻译');
+            assert(!sent.some(text => text.startsWith('Hacker News')) && !sent.includes('login'), '双语模式不翻译导航栏和单个短链接');
+            assert(sent.includes('Yet another way to invoke functions (ikaes.de)') && sent.some(text => text.startsWith('123 points by')), '标题和分数行照常翻译');
+            assert(translations().length === 2, '与原文相同的译文不重复插入');
+            assert(!fixture.querySelector('.rank .deepl-bilingual-translation, .rank + .deepl-bilingual-translation'), '序号格子里不能插入译文');
+            reset(fixture.innerHTML);
+            translationMock.respond = null;
+            await translateFullPage('replace');
+            assert(translationMock.calls.flat().includes('login'), '替换模式不改布局，导航栏照常翻译');
+        });
+
         await test('先翻译屏幕内的段落，再翻译下方和上方', async () => {
             reset(Array.from({ length: 80 }, (_, index) => `<p style="height:60px;margin:0">Para ${index}.</p>`).join(''));
             const paragraphs = [...fixture.querySelectorAll('p')];

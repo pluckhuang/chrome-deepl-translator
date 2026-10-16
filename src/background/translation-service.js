@@ -37,7 +37,7 @@
             return { messages: [{ role: 'user', content }], ...sampling };
         }
         const system = targetLang === 'ZH'
-            ? `你是专业译者，把用户发来的文本翻译成简体中文，只输出译文，不要解释，不要加引号：\n${ZH_RULES.map((rule, index) => `${index + 1}. ${rule}`).join('\n')}`
+            ? `你是专业译者，把用户发来的文本翻译成简体中文，只输出译文，不要解释，不要加引号；文本无需翻译（如人名、网址、代码）时原样输出，不要提问或回复其他内容：\n${ZH_RULES.map((rule, index) => `${index + 1}. ${rule}`).join('\n')}`
             : `你是专业译者。把用户发来的文本翻译成${name}：忠实原文，表达地道自然；专有名词、代码、链接和数字保持原样；只输出译文，不要解释，不要加引号。`;
         return { messages: [{ role: 'system', content: system }, { role: 'user', content: text }], temperature: 0.3 };
     }

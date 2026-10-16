@@ -49,8 +49,35 @@
         }
         return units.filter(unit => {
             unit.text = unit.text.trim();
-            return unit.text.length >= 2;
+            // 序号、分隔符这类没有文字的内容不翻译：大模型会把「1.」当成没说完的话，回一句「请提供原文」。
+            if (unit.text.length < 2 || !/\p{L}/u.test(unit.text)) return false;
+            return mode !== 'bilingual' || !isNavigation(unit);
         });
+    }
+
+    // 双语模式下跳过导航栏：几乎全是链接的一组短链接，或单独一个短链接（如「登录」）。
+    // 在它们下面插入译文只会挤乱页头页脚，替换模式不改布局，照常翻译。
+    function isNavigation(unit) {
+        const links = new Set();
+        let chars = 0;
+        let linkChars = 0;
+        unit.nodes.forEach((node, index) => {
+            const length = node.nodeValue.trim().length;
+            const link = unit.parents[index].closest('a');
+            chars += length;
+            if (link) {
+                links.add(link);
+                linkChars += length;
+            }
+        });
+        if (!chars || linkChars / chars < 0.8) return false;
+        return links.size >= 3 || unit.text.length <= 20;
+    }
+
+    // 只差全角半角或空白的译文（如「Muse Spark Open（meta.ai）」）不必再显示一遍。
+    function sameText(a, b) {
+        const normalize = text => text.normalize('NFKC').replace(/\s+/g, '').toLowerCase();
+        return normalize(a) === normalize(b);
     }
 
 
@@ -70,6 +97,7 @@
                 node.isConnected && node.nodeValue === unit.originals[index]
                 && node.parentElement === unit.parents[index] && unit.container.contains(node))) return false;
             if (mode === 'bilingual') {
+                if (sameText(translation, unit.text)) return true;
                 const element = document.createElement('span');
                 element.className = 'deepl-bilingual-translation';
                 element.dataset.deeplUi = '';
