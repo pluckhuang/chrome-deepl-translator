@@ -14,7 +14,14 @@
             onMessage: { addListener(listener) { listeners.push(listener); } },
             sendMessage(message, callback) {
                 const mock = translationMock;
-                if (message.action === 'getSettings') return callback({ success: true, configured: Boolean(mock.key) });
+                if (message.action === 'getSettings') {
+                    const local = mock.storage.translationProvider === 'local';
+                    return callback({ success: true, provider: local ? 'local' : 'deepl', configured: local || Boolean(mock.key), batchSize: local ? 4 : 30 });
+                }
+                if (message.action === 'testLocalModel') {
+                    mock.localTests = [...(mock.localTests || []), message];
+                    return callback(mock.localTestResponse || { success: true, translation: '细节决定成败。', elapsed: 1234 });
+                }
                 if (message.action === 'captureVisibleTab') {
                     mock.captureCalls++;
                     if (mock.capture) return mock.capture(callback);

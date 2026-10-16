@@ -11,7 +11,16 @@
 <body>
     <h2>🌐 DeepL 翻译助手</h2>
 
-    <div class="api-key-section">
+    <div class="section">
+        <label for="translationProvider">翻译引擎:</label>
+        <select id="translationProvider">
+            <option value="deepl">DeepL API</option>
+            <option value="local">本地模型（Ollama / LM Studio）</option>
+        </select>
+        <div class="help-text">划词、全文和 X 帖子翻译都使用这里选择的引擎，不会自动切换</div>
+    </div>
+
+    <div class="api-key-section" id="deeplSettings">
         <div class="section">
             <label for="apiKey">DeepL API Key:</label>
             <input type="password" id="apiKey" placeholder="输入你的 DeepL API Key">
@@ -20,6 +29,22 @@
             </div>
         </div>
         <button class="save-btn" id="saveApiKey">保存 API Key</button>
+    </div>
+
+    <div class="api-key-section" id="localSettings" hidden>
+        <div class="section">
+            <label for="localEndpoint">服务地址:</label>
+            <input type="url" id="localEndpoint" placeholder="http://127.0.0.1:11434/v1">
+            <div class="help-text">Ollama 默认 http://127.0.0.1:11434/v1，LM Studio 为 http://127.0.0.1:1234/v1</div>
+        </div>
+        <div class="section">
+            <label for="localModel">模型名称:</label>
+            <input type="text" id="localModel" placeholder="hf.co/mradermacher/Hunyuan-MT-7B-GGUF:Q5_K_M">
+        </div>
+        <div class="button-row">
+            <button class="save-btn" id="saveLocal">保存设置</button>
+            <button class="test-btn" id="testLocal">测试连接</button>
+        </div>
     </div>
 
     <div class="section">

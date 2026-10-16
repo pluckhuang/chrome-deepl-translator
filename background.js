@@ -7,14 +7,34 @@ const pageMenus = [
     { id: 'restorePageWithDeepL', title: '恢复网页原文', message: { action: 'restoreFullPage' } }
 ];
 const translator = DeepL.createTranslationService({
-    getApiKey: async () => (await chrome.storage.sync.get('deeplApiKey')).deeplApiKey
+    getSettings: () => chrome.storage.sync.get(DeepL.TRANSLATION_SETTING_KEYS)
 });
+const LOCAL_TEST_TEXT = 'The devil is in the details.';
+const OLLAMA_ORIGIN_RULE_ID = 1;
 
 chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'sync' && changes.deeplApiKey) translator.clearCache();
 });
 
+// Ollama 会拒绝带 chrome-extension:// Origin 的请求（403）；只对本插件发往本机的请求去掉 Origin，
+// 这样不用改 OLLAMA_ORIGINS 环境变量，网页对本机服务的请求不受影响。
+function installLocalOriginRule() {
+    return chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: [OLLAMA_ORIGIN_RULE_ID],
+        addRules: [{
+            id: OLLAMA_ORIGIN_RULE_ID,
+            action: { type: 'modifyHeaders', requestHeaders: [{ header: 'origin', operation: 'remove' }] },
+            condition: {
+                initiatorDomains: [chrome.runtime.id],
+                requestDomains: ['127.0.0.1', 'localhost'],
+                resourceTypes: ['xmlhttprequest', 'other']
+            }
+        }]
+    }).catch(error => console.warn('无法设置本地模型请求规则:', error.message));
+}
+
 chrome.runtime.onInstalled.addListener(() => {
+    installLocalOriginRule();
     chrome.contextMenus.removeAll(() => {
         chrome.contextMenus.create({ id: 'translateWithDeepL', title: '使用 DeepL 翻译选中文本', contexts: ['selection'] });
         pageMenus.forEach(({ id, title }) => chrome.contextMenus.create({ id, title, contexts: ['page'] }));
@@ -100,12 +120,27 @@ const pageCapture = DeepL.createPageCapture({
 
 const handlers = {
     async getSettings() {
-        const settings = await chrome.storage.sync.get('deeplApiKey');
-        return { configured: Boolean(DeepL.normalizeApiKey(settings.deeplApiKey)) };
+        const settings = { ...DeepL.TRANSLATION_DEFAULTS, ...await chrome.storage.sync.get(DeepL.TRANSLATION_SETTING_KEYS) };
+        const provider = settings.translationProvider === 'local' ? 'local' : 'deepl';
+        const configured = provider === 'local'
+            ? Boolean(DeepL.normalizeEndpoint(settings.localEndpoint) && String(settings.localModel || '').trim())
+            : Boolean(DeepL.normalizeApiKey(settings.deeplApiKey));
+        // 本地模型逐段生成较慢，全文翻译用小批次，进度和「恢复原文」才能及时响应。
+        return { provider, configured, batchSize: provider === 'local' ? 4 : 30 };
     },
     async translate(request) {
-        const translations = await translator.translate(request);
+        // 引擎由弹窗里保存的设置决定；网页侧的请求不能指定引擎或本地地址。
+        const { text, sourceLang, targetLang, apiKey } = request;
+        const translations = await translator.translate({ text, sourceLang, targetLang, apiKey });
         return Array.isArray(request.text) ? { translations } : { translation: translations[0] };
+    },
+    async testLocalModel(request) {
+        const started = Date.now();
+        const [translation] = await translator.translate({
+            text: LOCAL_TEST_TEXT, provider: 'local', targetLang: 'ZH', noCache: true,
+            localEndpoint: request.localEndpoint, localModel: request.localModel
+        });
+        return { translation, elapsed: Date.now() - started };
     },
     downloadImage,
     captureVisibleTab: (_, sender) => captureVisibleTab(sender.tab),

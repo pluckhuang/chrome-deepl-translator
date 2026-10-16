@@ -116,3 +116,19 @@ button:disabled {
 .capture-btn:hover {
     background-color: #4b5563;
 }
+.button-row {
+    display: flex;
+    gap: 8px;
+}
+
+.button-row button {
+    margin-top: 0;
+}
+
+.test-btn {
+    background-color: #5f6b7a;
+}
+
+.test-btn:hover {
+    background-color: #4b5563;
+}

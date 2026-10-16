@@ -9,17 +9,22 @@ function setup() {
     const hooks = {};
     const menus = [];
     const messages = [];
-    const state = { key: 'test:fx', activeId: 7, captures: 0, downloads: [] };
+    const state = { key: 'test:fx', settings: {}, activeId: 7, captures: 0, downloads: [], rules: [], fetches: [] };
     const context = vm.createContext({
         console, TextEncoder, AbortController, setTimeout, clearTimeout,
-        fetch: async (_, options) => ({ ok: true, json: async () => ({ translations: JSON.parse(options.body).text.map(text => ({ text: `译文：${text}` })) }) }),
+        fetch: async (url, options) => {
+            state.fetches.push({ url, body: JSON.parse(options.body) });
+            if (url.endsWith('/chat/completions')) return { ok: true, json: async () => ({ choices: [{ message: { content: '细节决定成败。' } }] }) };
+            return { ok: true, json: async () => ({ translations: JSON.parse(options.body).text.map(text => ({ text: `译文：${text}` })) }) };
+        },
         chrome: {
             runtime: {
+                id: 'test-extension-id',
                 onInstalled: { addListener: fn => { hooks.install = fn; } },
                 onMessage: { addListener: fn => { hooks.message = fn; } }
             },
             storage: {
-                sync: { get: async () => ({ deeplApiKey: state.key }) },
+                sync: { get: async () => ({ deeplApiKey: state.key, ...state.settings }) },
                 onChanged: { addListener: fn => { hooks.storage = fn; } }
             },
             contextMenus: {
@@ -33,7 +38,8 @@ function setup() {
                 captureVisibleTab: async () => { state.captures++; return 'data:image/png;base64,capture'; }
             },
             downloads: { download: (options, done) => { state.downloads.push(options); done(1); } },
-            action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} }
+            action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
+            declarativeNetRequest: { updateDynamicRules: async ({ addRules }) => { state.rules = addRules; } }
         }
     });
     context.importScripts = (...files) => files.forEach(file => vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context));
@@ -43,9 +49,14 @@ function setup() {
 }
 
 test('右键入口和 iframe 定向路由', async () => {
-    const { hooks, menus, messages } = setup();
+    const { hooks, menus, messages, state } = setup();
     hooks.install();
     assert.equal(menus.length, 6);
+    await new Promise(resolve => setImmediate(resolve));
+    const [rule] = state.rules;
+    assert.deepEqual(Array.from(rule.condition.initiatorDomains), ['test-extension-id'], '只改本插件自己的请求');
+    assert.deepEqual(Array.from(rule.condition.requestDomains), ['127.0.0.1', 'localhost']);
+    assert.equal(rule.action.requestHeaders[0].header, 'origin');
     await hooks.click({ menuItemId: 'translateWithDeepL', selectionText: 'Hello', frameId: 4 }, { id: 7 });
     await hooks.click({ menuItemId: 'translateBilingualPageWithDeepL', frameId: 4 }, { id: 7 });
     await hooks.click({ menuItemId: 'restorePageWithDeepL' }, { id: 7 });
@@ -86,6 +97,28 @@ test('后台读取凭证，兼容单条和批量翻译并报告缺失Key', async
     const missing = await dispatch({ action: 'translate', text: 'Single' });
     assert.equal(missing.success, false);
     assert.match(missing.error, /API Key/);
+});
+
+test('按弹窗保存的引擎翻译，网页请求不能指定引擎，连接测试不走缓存', async () => {
+    const { dispatch, state } = setup();
+    assert.equal((await dispatch({ action: 'getSettings' })).batchSize, 30);
+    state.settings = { translationProvider: 'local' };
+    const settings = await dispatch({ action: 'getSettings' });
+    assert.deepEqual([settings.provider, settings.configured, settings.batchSize], ['local', true, 4], '本地模型使用默认地址和模型');
+    assert.equal((await dispatch({ action: 'translate', text: 'Hello' })).translation, '细节决定成败。');
+    assert.equal(state.fetches[0].url, 'http://127.0.0.1:11434/v1/chat/completions');
+    assert.equal(state.fetches[0].body.model, 'hf.co/mradermacher/Hunyuan-MT-7B-GGUF:Q5_K_M');
+    state.settings = {};
+    await dispatch({ action: 'translate', text: 'Page', provider: 'local', localEndpoint: 'http://evil.example' });
+    assert.match(state.fetches.at(-1).url, /deepl\.com/, '网页侧请求只能使用已保存的引擎');
+    for (let i = 0; i < 2; i++) {
+        const tested = await dispatch({ action: 'testLocalModel', localEndpoint: 'http://127.0.0.1:1234/v1', localModel: 'qwen3' });
+        assert.equal(tested.translation, '细节决定成败。');
+        assert.equal(typeof tested.elapsed, 'number');
+    }
+    assert.equal(state.fetches.filter(item => item.url === 'http://127.0.0.1:1234/v1/chat/completions').length, 2, '每次测试都应真实请求');
+    state.settings = { translationProvider: 'local', localModel: ' ' };
+    assert.equal((await dispatch({ action: 'getSettings' })).configured, false);
 });
 
 test('截图仅捕获发起请求的活动标签页，下载校验PNG数据', async () => {

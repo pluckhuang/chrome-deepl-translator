@@ -1,21 +1,48 @@
 // 弹窗只负责输入和显示；请求统一经过后台翻译服务。
 (() => {
     document.addEventListener('DOMContentLoaded', () => {
-        const elements = Object.fromEntries(['apiKey', 'saveApiKey', 'sourceText', 'sourceLang', 'targetLang', 'translateBtn', 'result', 'capturePageBtn']
+        const elements = Object.fromEntries(['apiKey', 'saveApiKey', 'sourceText', 'sourceLang', 'targetLang', 'translateBtn', 'result', 'capturePageBtn',
+            'translationProvider', 'deeplSettings', 'localSettings', 'localEndpoint', 'localModel', 'saveLocal', 'testLocal']
             .map(id => [id, document.getElementById(id)]));
 
         function showResult(text, type = 'success') {
             elements.result.textContent = text;
             elements.result.className = `result show ${type}`;
         }
+        function showProvider() {
+            const local = elements.translationProvider.value === 'local';
+            elements.deeplSettings.hidden = local;
+            elements.localSettings.hidden = !local;
+        }
+        function readLocalSettings() {
+            return {
+                localEndpoint: DeepL.normalizeEndpoint(elements.localEndpoint.value),
+                localModel: elements.localModel.value.trim()
+            };
+        }
+        async function withButton(button, busyText, work) {
+            if (button.disabled) return;
+            const text = button.textContent;
+            button.disabled = true;
+            button.textContent = busyText;
+            try {
+                await work();
+            } finally {
+                button.disabled = false;
+                button.textContent = text;
+            }
+        }
         async function loadSettings() {
             try {
-                const settings = await chrome.storage.sync.get(['deeplApiKey', 'sourceLang', 'targetLang']);
-                // 避免异步读取覆盖用户已经开始输入的 Key。
+                const settings = { ...DeepL.TRANSLATION_DEFAULTS, ...await chrome.storage.sync.get([...DeepL.TRANSLATION_SETTING_KEYS, 'sourceLang', 'targetLang']) };
+                // 避免异步读取覆盖用户已经开始输入的内容。
                 if (!elements.apiKey.value) elements.apiKey.value = settings.deeplApiKey || '';
-                for (const id of ['sourceLang', 'targetLang']) {
+                if (!elements.localEndpoint.value) elements.localEndpoint.value = settings.localEndpoint;
+                if (!elements.localModel.value) elements.localModel.value = settings.localModel;
+                for (const id of ['translationProvider', 'sourceLang', 'targetLang']) {
                     if ([...elements[id].options].some(option => option.value === settings[id])) elements[id].value = settings[id];
                 }
+                showProvider();
             } catch (error) {
                 showResult(`读取设置失败：${error.message}`, 'error');
             }
@@ -56,18 +83,53 @@
                 chrome.storage.sync.set({ [id]: elements[id].value }).catch(error => showResult(`保存语言失败：${error.message}`, 'error'));
             });
         }
+        elements.translationProvider.addEventListener('change', async () => {
+            const provider = elements.translationProvider.value;
+            showProvider();
+            try {
+                await chrome.storage.sync.set({ translationProvider: provider });
+                showResult(`已切换为${DeepL.PROVIDER_NAMES[provider]}，划词、全文和 X 帖子翻译都会使用它`);
+            } catch (error) {
+                showResult(`切换失败：${error.message}`, 'error');
+            }
+        });
+        elements.saveLocal.addEventListener('click', () => withButton(elements.saveLocal, '保存中...', async () => {
+            const settings = readLocalSettings();
+            if (!settings.localEndpoint) return showResult('请输入以 http:// 或 https:// 开头的服务地址', 'error');
+            if (!settings.localModel) return showResult('请输入模型名称', 'error');
+            try {
+                await chrome.storage.sync.set(settings);
+                elements.localEndpoint.value = settings.localEndpoint;
+                showResult('本地模型设置已保存');
+            } catch (error) {
+                showResult(`保存失败：${error.message}`, 'error');
+            }
+        }));
+        elements.testLocal.addEventListener('click', () => withButton(elements.testLocal, '测试中...', async () => {
+            const settings = readLocalSettings();
+            if (!settings.localEndpoint || !settings.localModel) return showResult('请先填写服务地址和模型名称', 'error');
+            showResult('正在调用本地模型，首次加载模型可能需要十几秒...', 'info');
+            try {
+                const response = await DeepL.client.request({ action: 'testLocalModel', ...settings });
+                showResult(`✅ 连接成功（${(response.elapsed / 1000).toFixed(1)} 秒）：${response.translation}`);
+            } catch (error) {
+                showResult(`连接失败：${error.message}`, 'error');
+            }
+        }));
         elements.translateBtn.addEventListener('click', async () => {
             if (elements.translateBtn.disabled) return;
             const text = elements.sourceText.value.trim();
+            const deepl = elements.translationProvider.value !== 'local';
             const apiKey = DeepL.normalizeApiKey(elements.apiKey.value);
             if (!text) return showResult('请输入要翻译的文本', 'error');
-            if (!apiKey) return showResult('请先输入 API Key', 'error');
+            if (deepl && !apiKey) return showResult('请先输入 API Key', 'error');
             elements.translateBtn.disabled = true;
             elements.translateBtn.textContent = '翻译中...';
             elements.result.classList.remove('show');
             try {
+                // 弹窗里未保存的 Key 也可直接试用；本地模型使用已保存的设置。
                 const translation = await DeepL.client.translate(text, {
-                    apiKey, sourceLang: elements.sourceLang.value, targetLang: elements.targetLang.value
+                    ...(deepl ? { apiKey } : {}), sourceLang: elements.sourceLang.value, targetLang: elements.targetLang.value
                 });
                 showResult(translation);
             } catch (error) {

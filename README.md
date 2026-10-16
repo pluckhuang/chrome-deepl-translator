@@ -11,6 +11,7 @@
 - 🚀 快速响应，体验流畅
 - 📋 右键菜单快速翻译
 - 📖 全文双语翻译，原文与中文译文同时展示，支持恢复原文
+- 🖥️ 可切换为本地模型（Ollama / LM Studio）翻译，DeepL 额度用完时手动切换
 - 📸 在 X/Twitter 里右键保存帖子截图
 - 🖼️ 整页截图：自动滚动拼接，保存从上到下的完整网页
 
@@ -80,6 +81,42 @@
 
 固定顶栏只出现在截图顶部，Cookie 横幅、客服按钮等底部浮层只出现在底部，吸顶元素保留在原本位置，不会每屏重复。页面本身不滚动、内容在内部滚动区域里的单页应用，会截取面积最大的滚动区域。截图按当前窗口宽度生成；超长页面会先降到 1 倍分辨率，仍超过 32000px 时只保留前 32000px 并提示。浏览器内部页面（如 `chrome://`、扩展商店）无法截图。
 
+### 方法 7: 使用本地模型翻译
+
+DeepL 额度用完时会提示「可在插件弹窗将翻译引擎切换为本地模型」。插件**不会自动切换**，需要手动操作：
+
+1. 安装 [Ollama](https://ollama.com)，拉取翻译模型（约 5.4GB，24GB 内存的 Mac 可流畅运行）：
+   ```bash
+   ollama pull hf.co/mradermacher/Hunyuan-MT-7B-GGUF:Q5_K_M
+   ```
+2. 点击插件图标，把「翻译引擎」切换为「本地模型」。服务地址和模型名称已填好默认值，点「测试连接」确认能出译文
+3. 之后划词、全文双语、X 帖子和弹窗翻译都会使用本地模型；切回 DeepL 同样在弹窗里操作
+
+默认模型是腾讯的 [Hunyuan-MT-7B](https://huggingface.co/tencent/Hunyuan-MT-7B)，专门做翻译，按官方推荐的提示词和采样参数调用。也可以填其他模型（如 Qwen3 的非思考版），插件会改用通用的翻译提示词，并去掉模型输出的思考内容。使用 LM Studio 时把服务地址改为 `http://127.0.0.1:1234/v1`。
+
+- **不需要配置 `OLLAMA_ORIGINS`**：插件只对自己发往 `127.0.0.1` / `localhost` 的请求去掉 Origin 请求头，网页对本机服务的请求不受影响。若把 Ollama 放在其他机器上，需在那台机器上设置 `OLLAMA_ORIGINS="chrome-extension://*"`
+- **首次调用较慢**：Ollama 加载模型需要十几秒，之后单句一般在一秒内；空闲 5 分钟后模型会被卸载
+- **全文翻译较慢**：本地模型逐段生成，每 4 段更新一次进度，长页面需要几分钟；翻译中可随时「恢复网页原文」
+- **译文分开缓存**：切换引擎或模型后重新翻译，不会显示另一个引擎的旧译文
+- **去掉多余的括号说明**：Hunyuan-MT 常给习语补一段括号解释（如「细节决定成败（或：魔鬼藏在细节之中）」），原文没有括号时插件会去掉译文里的括号内容；原文本身有括号则原样保留
+
+**国内网络拉取很慢时**，可以从镜像下载 GGUF 后导入，并把弹窗里的模型名称改成 `hunyuan-mt`：
+
+```bash
+curl -L -C - -o Hunyuan-MT-7B.Q5_K_M.gguf https://hf-mirror.com/mradermacher/Hunyuan-MT-7B-GGUF/resolve/main/Hunyuan-MT-7B.Q5_K_M.gguf
+cat > Modelfile <<'MODELFILE'
+FROM ./Hunyuan-MT-7B.Q5_K_M.gguf
+TEMPLATE """{{ if .System }}<|startoftext|>{{ .System }}<|extra_4|>{{ end }}{{ if .Prompt }}<|startoftext|>{{ .Prompt }}<|extra_0|>{{ end }}{{ .Response }}<|eos|>"""
+PARAMETER stop <|startoftext|>
+PARAMETER stop <|extra_4|>
+PARAMETER stop <|extra_0|>
+PARAMETER stop <|eos|>
+PARAMETER top_k 20
+PARAMETER repeat_penalty 1.05
+MODELFILE
+ollama create hunyuan-mt -f Modelfile
+```
+
 ## 支持的语言
 
 - 中文 (ZH)
@@ -105,13 +142,13 @@ chrome-deepl-translator/
 ├── content.css                # 插件页面组件样式
 ├── src/
 │   ├── shared/                # 有界缓存、Key清理、统一消息客户端
-│   ├── background/            # DeepL服务：分批、去重、缓存、并发与超时；整页截图拼接
+│   ├── background/            # 翻译服务（DeepL / 本地模型）：分批、去重、缓存、并发与超时；整页截图拼接
 │   └── content/               # 划词、全文任务、DOM渲染、提示、X截图、整页截图滚动
 ├── tests/                     # 后台单元测试与真实浏览器回归
 └── icons/
 ```
 
-所有翻译入口统一通过后台调用 DeepL，内容脚本无需读取 API Key。后台按原文、语言和账户合并重复请求，限制最多两个并发请求，并按条数和 UTF-8 字节数分批。请求有超时，失败结果不缓存；前端关闭或恢复原文后会丢弃迟到结果。缓存只存于内存且有容量上限。
+所有翻译入口统一通过后台调用弹窗里选定的翻译引擎，内容脚本无需读取 API Key，也不能自行指定引擎。DeepL 按原文、语言和账户合并重复请求，限制最多两个并发请求，并按条数和 UTF-8 字节数分批；本地模型逐段请求、串行执行，缓存按地址和模型区分。请求有超时，失败结果不缓存；前端关闭或恢复原文后会丢弃迟到结果。缓存只存于内存且有容量上限。
 
 仍然无需构建：直接加载仓库目录即可。`manifest.json` 中公共脚本先于功能模块注入，各功能通过 `DeepL` 命名空间公开少量入口，内部状态不共享全局变量。
 
@@ -143,7 +180,7 @@ npm test
 npm run test:browser
 ```
 
-浏览器测试使用临时用户目录，模拟 DeepL 响应、截图和下载，不读取现有浏览器资料，也不消耗翻译额度。覆盖弹窗、划词、全文替换、双语对照、X 动态内容、长帖拼接、整页截图逐屏拼接与浮层处理和失败恢复。Chrome 不在默认位置时可用 `CHROME_PATH` 指定可执行文件。
+浏览器测试使用临时用户目录，模拟 DeepL 响应、截图和下载，不读取现有浏览器资料，也不消耗翻译额度。覆盖弹窗、翻译引擎切换、划词、全文替换、双语对照、X 动态内容、长帖拼接、整页截图逐屏拼接与浮层处理和失败恢复。Chrome 不在默认位置时可用 `CHROME_PATH` 指定可执行文件。
 
 `quick-test.html` 用于加载扩展后的手动检查；`tests/full-page-translation.html` 也可独立打开执行全文 DOM 回归。
 

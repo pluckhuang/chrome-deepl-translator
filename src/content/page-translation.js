@@ -4,7 +4,6 @@
     const renderer = pageDom.createRenderer();
     const cache = new DeepL.TextCache();
     const toastId = 'deepl-page-translation-toast';
-    const batchSize = 30;
     let currentRun = null;
 
     function restore() {
@@ -12,14 +11,17 @@
         renderer.restore();
         ui.toast(toastId, '✅ 已恢复网页原文', 'success', 3000);
     }
+    // 缓存按引擎区分：切换引擎后重新翻译，不会显示另一个引擎的旧译文。
+    const cacheKey = (run, text) => `${run.provider}\n${text}`;
+    const cachedValues = (batch, run) => new Map(batch.map(unit => [unit.text, cache.get(cacheKey(run, unit.text))]));
     async function loadBatch(batch, run) {
-        const values = new Map(batch.map(unit => [unit.text, cache.get(unit.text)]));
+        const values = cachedValues(batch, run);
         const missing = [...values.keys()].filter(text => values.get(text) === undefined);
         if (missing.length) {
             const translations = await client.translate(missing);
             if (currentRun !== run) return values;
             missing.forEach((text, index) => {
-                cache.set(text, translations[index]);
+                cache.set(cacheKey(run, text), translations[index]);
                 values.set(text, translations[index]);
             });
         }
@@ -33,13 +35,17 @@
     async function translate(mode = 'replace') {
         if (!document.body || currentRun) return;
         mode = mode === 'bilingual' ? 'bilingual' : 'replace';
-        const run = { label: mode === 'bilingual' ? '全文双语翻译' : '全网页翻译', completed: 0, failed: 0, total: 0, error: '' };
+        const run = { label: mode === 'bilingual' ? '全文双语翻译' : '全网页翻译', provider: 'deepl', completed: 0, failed: 0, total: 0, error: '' };
         currentRun = run;
         const toast = ui.toast(toastId, `🔄 正在准备${run.label}...`);
         try {
             const settings = await client.request({ action: 'getSettings' });
             if (currentRun !== run) return;
-            if (!settings.configured) throw new Error('请先设置 DeepL API Key');
+            if (!settings.configured) throw new Error('请先在插件弹窗完成翻译引擎设置');
+            run.provider = settings.provider || 'deepl';
+            const engine = DeepL.PROVIDER_NAMES[run.provider] || run.provider;
+            const batchSize = settings.batchSize || 30;
+            toast.textContent = `🔄 正在准备${run.label}（${engine}）...`;
             renderer.restore();
             const units = pageDom.collectUnits(mode);
             run.total = units.length;
@@ -54,7 +60,7 @@
                     values = await loadBatch(batch, run);
                 } catch (error) {
                     run.error = error.message;
-                    values = new Map(batch.map(unit => [unit.text, cache.get(unit.text)]));
+                    values = cachedValues(batch, run);
                 }
                 if (currentRun !== run) return;
                 for (const unit of batch) {
@@ -62,7 +68,7 @@
                     if (translated && renderer.apply(unit, translated, mode)) run.completed++;
                     else run.failed++;
                 }
-                toast.textContent = `🔄 翻译进度: ${run.completed} / ${run.total}`;
+                toast.textContent = `🔄 ${engine}翻译进度: ${run.completed} / ${run.total}`;
                 // 缓存命中时也让出主线程，长页仍能点击“恢复原文”。
                 if (i + batchSize < units.length) await new Promise(resolve => setTimeout(resolve, 0));
                 if (currentRun !== run) return;

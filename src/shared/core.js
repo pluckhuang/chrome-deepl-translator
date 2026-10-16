@@ -2,6 +2,19 @@
 (() => {
     const app = globalThis.DeepL = globalThis.DeepL || {};
     app.normalizeApiKey = value => typeof value === 'string' ? value.replace(/[^\x21-\x7E]/g, '') : '';
+    // 只接受 http(s) 地址，去掉末尾斜杠，方便拼接 /chat/completions。
+    app.normalizeEndpoint = value => {
+        const text = typeof value === 'string' ? value.trim().replace(/\/+$/, '') : '';
+        return /^https?:\/\/[^\s/]+/i.test(text) ? text : '';
+    };
+    // 翻译引擎只能在弹窗里手动切换，默认仍用 DeepL。
+    app.TRANSLATION_DEFAULTS = {
+        translationProvider: 'deepl',
+        localEndpoint: 'http://127.0.0.1:11434/v1',
+        localModel: 'hf.co/mradermacher/Hunyuan-MT-7B-GGUF:Q5_K_M'
+    };
+    app.TRANSLATION_SETTING_KEYS = ['deeplApiKey', ...Object.keys(app.TRANSLATION_DEFAULTS)];
+    app.PROVIDER_NAMES = { deepl: 'DeepL', local: '本地模型' };
 
     // 页面和后台缓存都有容量上限，避免长时间浏览不断积累文本。
     app.TextCache = class {

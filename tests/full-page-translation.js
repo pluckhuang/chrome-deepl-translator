@@ -14,6 +14,7 @@
         translationMock.calls = [];
         translationMock.key = 'test-key';
         translationMock.respond = null;
+        translationMock.storage = {};
         fixture.innerHTML = html;
     };
     const test = async (name, run) => {
@@ -127,6 +128,27 @@
             translationMock.respond = (_, callback) => callback({ success: true, translations: ['$& $$ $1'] });
             await translateFullPage();
             assert(fixture.textContent === '$& $$ $1', '译文中的替换字符应保持原样');
+        });
+
+        await test('本地模型小批次翻译，切换引擎后不复用旧译文', async () => {
+            reset(Array.from({ length: 9 }, (_, index) => `<p>Engine ${index}.</p>`).join(''));
+            await translateFullPage('bilingual');
+            assert(translationMock.calls.length === 1, 'DeepL 一次请求 30 段');
+            translationMock.storage.translationProvider = 'local';
+            translationMock.calls = [];
+            let progress = '';
+            translationMock.respond = (message, callback) => {
+                progress = document.getElementById('deepl-page-translation-toast').textContent;
+                callback({ success: true, translations: message.text.map(text => `本地：${text}`) });
+            };
+            await translateFullPage('bilingual');
+            assert(translationMock.calls.map(batch => batch.length).join() === '4,4,1', '本地模型按 4 段一批');
+            assert(progress.includes('本地模型'), '进度提示应注明引擎');
+            assert(translations()[0].textContent === '本地：Engine 0.', '切换引擎后应重新翻译');
+            translationMock.storage.translationProvider = 'deepl';
+            translationMock.calls = [];
+            await translateFullPage('bilingual');
+            assert(translationMock.calls.length === 0 && translations()[0].textContent === '译文：Engine 0.', '切回原引擎复用它自己的缓存');
         });
 
         restoreFullPage();
