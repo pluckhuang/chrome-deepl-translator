@@ -85,48 +85,39 @@
 
 DeepL 额度用完时会提示「可在插件弹窗将翻译引擎切换为本地模型」。插件**不会自动切换**，需要手动操作：
 
-1. 安装 [Ollama](https://ollama.com)，拉取翻译模型（约 5.4GB，24GB 内存的 Mac 可流畅运行）：
+1. 安装 [Ollama](https://ollama.com/download)（或 `brew install --cask ollama`），打开一次
+2. 在项目目录运行安装脚本（macOS），一条命令装好模型、提速设置和开机自启：
    ```bash
-   ollama pull hf.co/mradermacher/Hunyuan-MT-7B-GGUF:Q5_K_M
+   scripts/setup-local-model.sh
    ```
-2. 点击插件图标，把「翻译引擎」切换为「本地模型」。服务地址和模型名称已填好默认值，点「测试连接」确认能出译文
-3. 之后划词、全文双语、X 帖子和弹窗翻译都会使用本地模型；切回 DeepL 同样在弹窗里操作
+3. 在 `chrome://extensions/` 重新加载插件，点击插件图标，把「翻译引擎」切换为「本地模型」。服务地址和模型名称已填好默认值，点「测试连接」确认能出译文
+4. 之后划词、全文双语、X 帖子和弹窗翻译都会使用本地模型；切回 DeepL 同样在弹窗里操作
 
-默认模型是腾讯的 [Hunyuan-MT-7B](https://huggingface.co/tencent/Hunyuan-MT-7B)，专门做翻译，按官方推荐的提示词和采样参数调用。也可以填其他模型（如 Qwen3 的非思考版），插件会改用通用的翻译提示词，并去掉模型输出的思考内容。使用 LM Studio 时把服务地址改为 `http://127.0.0.1:1234/v1`。
+**安装脚本做了什么**（可重复运行，已完成的步骤会跳过）：
 
+- **下载模型**：[Hunyuan-MT-7B](https://huggingface.co/tencent/Hunyuan-MT-7B) 的 Q5_K_M 量化版（约 5.4GB）。先测速，自动选 Hugging Face 或国内镜像 hf-mirror.com，支持断点续传；校验 SHA-256 后以 `hf.co/mradermacher/Hunyuan-MT-7B-GGUF:Q5_K_M` 导入 Ollama，与 `ollama pull` 的结果相同
+- **提速设置**：按内存设置 Ollama 同时处理的段数（24GB 及以上 4 段，16GB 2 段，更小 1 段），模型空闲 15 分钟后卸载。实测 M5 / 24GB 上 8 段从 10.7 秒降到 6.3 秒，模型占用内存从 6.3GB 增至 8.9GB
+- **开机自启**：安装 LaunchAgent（`~/Library/LaunchAgents/local.chrome-deepl-translator.ollama-env.plist`），每次登录时运行 `~/.ollama/ollama-env.sh` 设置上述变量；Ollama 未运行就启动它，先于设置启动了就重启一次，日志在 `~/.ollama/logs/ollama-env.log`
+- **试翻译**：确认 Ollama 已按新设置运行并能出译文
+
+| 参数 | 说明 |
+|---|---|
+| `--parallel 1-8` | 同时处理的段数，默认按内存决定 |
+| `--keep-alive 15m` | 空闲多久后卸载模型，如 `1h`、`0`（用完即卸载）、`-1`（一直常驻） |
+| `--mirror` / `--no-mirror` | 强制使用镜像 / 只用 Hugging Face，默认自动测速选择 |
+| `--uninstall` | 撤销提速设置和开机自启，恢复 Ollama 默认设置（保留模型，删除用 `ollama rm`） |
+
+不用脚本也可以手动安装：`ollama pull hf.co/mradermacher/Hunyuan-MT-7B-GGUF:Q5_K_M`。这样没有提速设置，国内网络也可能拉取很慢。
+
+**使用说明**：
+
+- **其他模型**：也可以填其他模型（如 Qwen3 的非思考版），插件会改用通用的翻译提示词，并去掉模型输出的思考内容。使用 LM Studio 时把服务地址改为 `http://127.0.0.1:1234/v1`
 - **不需要配置 `OLLAMA_ORIGINS`**：插件只对自己发往 `127.0.0.1` / `localhost` 的请求去掉 Origin 请求头，网页对本机服务的请求不受影响。若把 Ollama 放在其他机器上，需在那台机器上设置 `OLLAMA_ORIGINS="chrome-extension://*"`
-- **首次调用较慢**：Ollama 加载模型需要 5–10 秒，之后单句一般在一秒左右；默认空闲 5 分钟后模型会被卸载
+- **首次调用较慢**：Ollama 加载模型需要 5–10 秒，之后单句一般在一秒左右
 - **全文翻译较慢**：本地模型逐段生成，插件同时发 4 个请求、每 8 段更新一次进度，并先翻译屏幕内的段落；长页面仍需几十秒到几分钟，翻译中可随时「恢复网页原文」
 - **译文分开缓存**：切换引擎或模型后重新翻译，不会显示另一个引擎的旧译文
 - **去掉多余的括号说明**：Hunyuan-MT 常给习语补一段括号解释（如「细节决定成败（或：魔鬼藏在细节之中）」），原文没有括号时插件会去掉译文里的括号内容；原文本身有括号则原样保留
-
-**提速（可选）**：让 Ollama 同时处理 4 段，并延长模型常驻时间。实测 M5 / 24GB 上 8 段从 10.7 秒降到 6.3 秒，模型占用内存从 6.3GB 增至 8.9GB：
-
-```bash
-launchctl setenv OLLAMA_NUM_PARALLEL 4
-launchctl setenv OLLAMA_FLASH_ATTENTION 1
-launchctl setenv OLLAMA_KEEP_ALIVE 15m
-# 退出并重新打开 Ollama 后生效
-```
-
-`launchctl setenv` 重启电脑后会失效，需要每次登录时执行：可以写一个 LaunchAgent（`~/Library/LaunchAgents/` 下设 `RunAtLoad` 的 plist）在登录时运行上面三条命令；如果 Ollama 作为登录项先启动了，还要在命令之后重启一次 Ollama。
-
-**国内网络拉取很慢时**，可以从镜像下载 GGUF 后导入，并把弹窗里的模型名称改成 `hunyuan-mt`：
-
-```bash
-curl -L -C - -o Hunyuan-MT-7B.Q5_K_M.gguf https://hf-mirror.com/mradermacher/Hunyuan-MT-7B-GGUF/resolve/main/Hunyuan-MT-7B.Q5_K_M.gguf
-cat > Modelfile <<'MODELFILE'
-FROM ./Hunyuan-MT-7B.Q5_K_M.gguf
-TEMPLATE """{{ if .System }}<|startoftext|>{{ .System }}<|extra_4|>{{ end }}{{ if .Prompt }}<|startoftext|>{{ .Prompt }}<|extra_0|>{{ end }}{{ .Response }}<|eos|>"""
-PARAMETER stop <|startoftext|>
-PARAMETER stop <|extra_4|>
-PARAMETER stop <|extra_0|>
-PARAMETER stop <|eos|>
-PARAMETER top_k 20
-PARAMETER repeat_penalty 1.05
-MODELFILE
-ollama create hunyuan-mt -f Modelfile
-```
+- **内存**：模型加载期间占 6–9GB；16GB 内存建议 `--parallel 2`，8GB 内存不建议使用本地模型
 
 ## 支持的语言
 
@@ -155,6 +146,7 @@ chrome-deepl-translator/
 │   ├── shared/                # 有界缓存、Key清理、统一消息客户端
 │   ├── background/            # 翻译服务（DeepL / 本地模型）：分批、去重、缓存、并发与超时；整页截图拼接
 │   └── content/               # 划词、全文任务、DOM渲染、提示、X截图、整页截图滚动
+├── scripts/                   # 本地模型安装脚本（Ollama、模型、提速与开机自启）
 ├── tests/                     # 后台单元测试与真实浏览器回归
 └── icons/
 ```
